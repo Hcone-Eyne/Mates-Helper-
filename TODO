@@ -1,0 +1,6 @@
+TODO: Fix this currently returns [] Both in OCR_Extraction and in schedule_pharaser.py
+
+OCR_Extractor
+TODO: Fix the Upscalling in OCR, (blocked on image quality)
+Get higher-res source (direct portal download, not screenshot) OR
+Try strip-by-strip OCR cropping
