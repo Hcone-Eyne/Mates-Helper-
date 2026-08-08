@@ -2,3 +2,4 @@ pytesseract
 pdf2image
 rich
 pathlib
+pandas
