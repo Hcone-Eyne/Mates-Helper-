@@ -7,6 +7,9 @@ from Schedule_Bot.schedule_pharaser import day_splitter
 from Schedule_Bot.schedule_pharaser import Days
 from datetime import datetime
 import pandas as pd
+from PIL import Image, ImageOps
+from pdf2image import convert_from_path as pdf_path
+
 
 # adding date and time!
 def datatime_fetcher(prompt):
@@ -48,7 +51,7 @@ def pdf_extractor(pdf):
     return full_text
 
 # creating a function to quality check
-def quality_checker(image, expected_days = 5 ):
+def quality_checker(image, expected_days = 2 ):
     # extract the text and check if the text is trustworthy or not
     days_found = sum (1 for day in Days if day.lower() in image.lower())
     # check the fetched condition
@@ -56,9 +59,13 @@ def quality_checker(image, expected_days = 5 ):
         return False # didnt meet = reject
     return True # meet condition = accept
 
+# this is used to check the givem image and decide to accept or reject!
 def schedule_text_extractor(image_path):
     # gettning image text using path and image_extractor function
     raw_data = image_extractor(image_path)
+    print("--- RAW OCR OUTPUT ---")
+    print(raw_data)
+    print("--- LENGTH:", len(raw_data), "---")
     # quality check
     if quality_checker(raw_data):
         return raw_data # if true it return raw data
@@ -88,8 +95,8 @@ def Manual_Input():
 
             # inputs for the subjects
             subject = input("[Fox]: Enter Subject: ").strip()
-            time_start = datatime_fetcher("[Fox]: Enter Start Time (HH:MM): ")
-            time_end = datatime_fetcher("[Fox]: Enter End Time (HH:MM)")
+            time_start = datatime_fetcher("[Fox]: Enter Start Time (HH:MM) - ")
+            time_end = datatime_fetcher("[Fox]: Enter End Time (HH:MM) - ")
             books = input("[Fox]: Books needed (optional, press enter to skip):").strip()
 
             # adding the input data to the list!
@@ -107,20 +114,32 @@ def Manual_Input():
     # return the made up value
     return pd.DataFrame(data)    
 
+# a data framer to store the extracted data!
+def dataframe_builder(data):
+    # adding days block table!
+    day_blocks = day_splitter(data)
+    # adding period block to the table@
+    period_block = time_extractor(data)
 
+    # structure of the data to store!!
+    data = {"day": [], "subject": [], "time_start": [], "time_end": [], "books_needed": []}
 
+    # safety checker like day splitter finds less that 5 schedule / days it enable failsafe mode to prevent bad data entering!
+    if len(day_blocks) < 5:
+        print("[Fox]: Data mismatch detected! - Some of the Critical data is missing.....")
+        # TODO: failsafe
+
+    # else it continues the work asusual!
+    for day, content in day_blocks.items():
+        # this splits text by white space so that code can auto differentiate words and add to the file!
+        # it splits, remove the emty from the list (because of the split!) like white space and then remove the surrounding thinks like \n and extra white space!
+        subject = [s.strip() for s in content.split() if s.strip()]
+        # TODO: next is TO Pair Subject with period!
+    return pd.dataframe_builder(data)
 
 
 # TODO: Fix this currently returns []
 # calling function
 if __name__ == "__main__":
-    from PIL import Image, ImageOps
-
-    img = Image.open("data/Schedule.png")
-    img = img.convert("L")                          # grayscale
-    img = img.resize((img.width * 3, img.height * 3))  # upscale 3x
-    img = ImageOps.autocontrast(img)                 # boost contrast
-
-    text = pytesseract.image_to_string(img, config="--psm 6")
-    print(len(text))
-    print(text)
+    data = schedule_text_extractor("Schedule_Bot/Data/Schedule.png")
+    print(data)
