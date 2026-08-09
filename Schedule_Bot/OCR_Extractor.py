@@ -117,29 +117,6 @@ def Manual_Input():
     # return the made up value
     return pd.DataFrame(data)    
 
-# a data framer to store the extracted data!
-def dataframe_builder(data):
-    # adding days block table!
-    day_blocks = day_splitter(data)
-    # adding period block to the table@
-    period_block = time_extractor(data)
-
-    # structure of the data to store!!
-    data = {"day": [], "subject": [], "time_start": [], "time_end": [], "books_needed": []}
-
-    # safety checker like day splitter finds less that 5 schedule / days it enable failsafe mode to prevent bad data entering!
-    if len(day_blocks) < 5:
-        print("[Fox]: Data mismatch detected! - Some of the Critical data is missing.....")
-        # TODO: failsafe
-
-    # else it continues the work asusual!
-    for day, content in day_blocks.items():
-        # this splits text by white space so that code can auto differentiate words and add to the file!
-        # it splits, remove the emty from the list (because of the split!) like white space and then remove the surrounding thinks like \n and extra white space!
-        subject = [s.strip() for s in content.split() if s.strip()]
-        # TODO: next is TO Pair Subject with period!
-    return pd.DataFrame(data)
-
 # adding a extract table function to detect image grid by grid to fetch ine information
 def extract_table(image_path):
     # setting up the tesseract lang eng so while fetching it won't fail
@@ -276,7 +253,6 @@ def longformat_table(data):
         print(f"[Fox]: Something went wrong while reshaping the table — {e}")
         return None
 
-# TODO: Fix this currently returns []
 # calling function
 if __name__ == "__main__":
     df = extract_table("Schedule_Bot/Data/Schedule.png")
