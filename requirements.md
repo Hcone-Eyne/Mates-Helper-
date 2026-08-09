@@ -3,3 +3,4 @@ pdf2image
 rich
 pathlib
 pandas
+img2table

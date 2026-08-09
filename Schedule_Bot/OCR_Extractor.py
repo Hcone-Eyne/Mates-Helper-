@@ -6,10 +6,13 @@ from Schedule_Bot.schedule_pharaser import time_extractor
 from Schedule_Bot.schedule_pharaser import day_splitter
 from Schedule_Bot.schedule_pharaser import Days
 from datetime import datetime
+
+# ahh too much library!
 import pandas as pd
 from PIL import Image, ImageOps
 from pdf2image import convert_from_path as pdf_path
-
+from img2table.document import Image as TableImage # i used TableImage to prevent the error ( u have used that image variable agian that's why)
+from img2table.ocr import TesseractOCR
 
 # adding date and time!
 def datatime_fetcher(prompt):
@@ -135,11 +138,110 @@ def dataframe_builder(data):
         # it splits, remove the emty from the list (because of the split!) like white space and then remove the surrounding thinks like \n and extra white space!
         subject = [s.strip() for s in content.split() if s.strip()]
         # TODO: next is TO Pair Subject with period!
-    return pd.dataframe_builder(data)
+    return pd.DataFrame(data)
 
+# adding a extract table function to detect image grid by grid to fetch ine information
+def extract_table(image_path):
+    # setting up the tesseract lang eng so while fetching it won't fail
+    ocr = TesseractOCR(lang = "eng")
+    # location of the image
+    doc = TableImage(image_path)
+    # table is used to extract info from the table
+    tables = doc.extract_tables(ocr = ocr)
 
+    # defining the table df
+    data_remover = tables[0].df
+    # removing the lunch / break column (yes uisng the positions)
+    data_remover = data_remover.drop(columns =[3,6,9])
+
+    # making the 1st row as header
+    data_remover.columns = data_remover.iloc[0]
+    data_remover = data_remover.drop(index=0).reset_index(drop=True)
+    # return the fetched answer
+    return data_remover
+
+# adding a function to resolve missed / corrupeted data in csv
+def corrupt_finder(data):
+    # this function fix the corrupted details like NAN, None, random gibrish etc..
+    data = data.replace(r'^\s*$', "Corrupted", regex=True) # it replaces only empty/ blank cell with "Corrupted" Tag
+    data = data.fillna("Corrupted") # it replaces only NaN and None Value
+    data = data.replace("None", "Corrupted") # replace None -> corrupted at start of ocr
+
+    # retun the data to show!
+    return data
+
+# this function for resolving the corrupted data (aka ask the user to fill the corrupted field)
+def corrupt_fixer(data):
+    # loops for iterating over the table based on index and colums!
+    for row in data.index:
+        for column in data.columns:
+            # accessing the data!
+            store_data = data.at[row, column]
+            # condition to check if data is corrupted
+            if store_data == "Corrupted":
+                # getting 1st colums are day
+                day = data.at[row, data.columns[0]]
+                # telling user to manually input the field
+                print(f"\n[Fox]: Couldn't read this cell — Day: {day}, Period: {column}")
+                # getting the input to fill the field
+                fix = input("[Fox]: What should i say this? (or type 'skip'): ").strip()
+                # if input is not skip it enters the data to the field
+                if fix.lower() != "skip":
+                    # inserting the input data to the csv
+                    data.at[row, column] = fix
+    # returning the data
+    return data
+
+# adding another function to see / review and edit the table!
+def review_edit(data):
+    print("[Fox]: Here's your schedule.....")
+    # .to_string() = forces to print rows and column + convert entier table into string!
+    print(data.to_string())
+
+    try:
+        while True:
+            choice = input("\n[Fox]: Want to edit a cell? (yes/no): ").strip().lower()
+            if choice != "yes":
+                break
+
+            day_input = input("[Fox]: Which day?: ").strip()
+            # this checks for the matching data in all the rows and cols hehehe
+            matches = data[data[data.columns[0]].str.lower() == day_input.lower()]
+
+            # if matches is empty, notify user and continue (continue means below period and then repeat till either user quit or got correct input)
+            if matches.empty:
+                print("[Fox]: Day not found, Try again!")
+                continue
+
+            # check rows for matches
+            row = matches.index[0]
+            print("\n[Fox]:Periods for {day_input}: ")
+            # this iterate over columns
+            for column in data.columns[1:]:
+                # prints the founded data + that data.loc will look through each row and column and prints the required found value!
+                print(f" {column} -> {data.loc[row, column]}")
+
+            # asking edit for period
+            period = input("[Fox]: Which period do you want to edit?: ").strip() # ask user what to edit
+            # check period is present in table
+            if period not in data.columns:
+                print("[Fox]: Period not found, try again. ") # this notifies the user and it prompts to tryagain forgot? while loop that's why!
+                continue
+
+            new_value = input(f"[Fox]: New value for {day_input} / {period}: ").strip()
+            data.at[row, period] = new_value
+            print("[Fox]: Updated.\n")
+        return data
+    except Exception:
+        pass
+    except ValueError:
+        pass
+                  
 # TODO: Fix this currently returns []
 # calling function
 if __name__ == "__main__":
-    data = schedule_text_extractor("Schedule_Bot/Data/Schedule.png")
-    print(data)
+    df = extract_table("Schedule_Bot/Data/Schedule.png")
+    df = corrupt_finder(df)
+    df = corrupt_fixer(df)
+    df = review_edit(df)
+    print(df)
