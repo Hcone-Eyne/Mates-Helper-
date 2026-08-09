@@ -1,0 +1,59 @@
+day,subject,time_start,time_end,books_needed
+Monday,CA,8.30 9.20,,
+Monday,CA,9.20,10.10,
+Monday,Corrupted,10.20,11.10,
+Monday,"4
+12.00)
+FDS","4
+12.00
+FDS",,
+Monday,"24CSC03
+DPCO",12.40,1.25|,
+Monday,"24CSC03
+DPCO",1.25,2.10,
+Monday,DS(L),2.20,3.05,
+Monday,|24CS306 DS(L),3.05,3.50,
+Tuesday,24MA306,8.30 9.20,,
+Tuesday,DM|24MA306 DM,9.20,10.10,
+Tuesday,DS None,10.20,11.10,
+Tuesday,24CS306 DS,"4
+12.00
+FDS",,
+Tuesday,"24CSC03
+OOPs",12.40,1.25|,
+Tuesday,"24CSC05
+OOPs",1.25,2.10,
+Tuesday,None 24CSC03 DPCO,2.20,3.05,
+Tuesday,|24CSC03 DPCO,3.05,3.50,
+Wednesday,24CS306 DS None,8.30 9.20,,
+Wednesday,2405306 DS,9.20,10.10,
+Wednesday,24MA306,10.20,11.10,
+Wednesday,Corrupted,"4
+12.00
+FDS",,
+Wednesday,Corrupted,12.40,1.25|,
+Wednesday,CA,1.25,2.10,
+Wednesday,Corrupted,2.20,3.05,
+Wednesday,FDS(L)|24C$307 FDS(L),3.05,3.50,
+Thursday,CA,8.30 9.20,,
+Thursday,OOPs,9.20,10.10,
+Thursday,"24CSC03
+DPCO",10.20,11.10,
+Thursday,"24CSC03
+DPCO","4
+12.00
+FDS",,
+Thursday,OOPs,12.40,1.25|,
+Thursday,OOPs,1.25,2.10,
+Thursday,24MA306 DM,2.20,3.05,
+Thursday,None 24MA306 DM,3.05,3.50,
+Friday,24HSS03 LS None,8.30 9.20,,
+Friday,24HSS03 LS,9.20,10.10,
+Friday,Corrupted,10.20,11.10,
+Friday,FDS,"4
+12.00
+FDS",,
+Friday,24GSS02 IPP,12.40,1.25|,
+Friday,P.Ed,1.25,2.10,
+Friday,SkillRack,2.20,3.05,
+Friday,SkillRack,3.05,3.50,

@@ -232,11 +232,50 @@ def review_edit(data):
             data.at[row, period] = new_value
             print("[Fox]: Updated.\n")
         return data
-    except Exception:
+    except Exception as e:
+        print(f"[Fox]: Something went wrong — {e}")
         pass
     except ValueError:
         pass
-                  
+
+# adding function again and again to fix the formant (long format table to match the csv)
+def longformat_table(data):
+    # data adding
+    long_data = {"day": [], "subject": [], "time_start": [], "time_end": [], "books_needed": []}
+
+    try:
+        # adding periods and day column
+        period_column  = data.columns[1:]
+        days_column = data.columns[0]
+
+        # iterate through the column and fix the table
+        for _, row in data.iterrows():
+            # iterating days row
+            day = row[days_column]
+            for period in period_column:
+                # iterating column row for period!
+                subject = row[period]
+                if pd.isna(subject) or str(subject).strip() == "":
+                    continue
+
+                # adding things so csv won't messed up like start and stop
+                time = str(period).replace("(", "").replace(")", "").split("-") # this replace and splits based on the table
+                time_start = time[0].strip() if len(time) > 0 else "" # adding the start time to the table
+                time_end = time[1].strip() if len(time) > 1 else "" # adding tthe end time to the table
+
+                # appending things to the long data to store! and update!
+                long_data["day"].append(day)  # adding day
+                long_data["subject"].append(str(subject).strip())  # adding subject
+                long_data["time_start"].append(time_start) # adding start time
+                long_data["time_end"].append(time_end) # adding end time
+                long_data["books_needed"].append("")  # adding details for required books based on period
+        return pd.DataFrame(long_data)
+    
+    # to catch the error and run program even after the error
+    except Exception as e:
+        print(f"[Fox]: Something went wrong while reshaping the table — {e}")
+        return None
+
 # TODO: Fix this currently returns []
 # calling function
 if __name__ == "__main__":
@@ -244,4 +283,11 @@ if __name__ == "__main__":
     df = corrupt_finder(df)
     df = corrupt_fixer(df)
     df = review_edit(df)
-    print(df)
+
+    long_data = longformat_table(df)
+    print(long_data)
+
+    from Schedule_Bot.schedule_pharaser import csv_saver
+    from Path_mapper import SCHEDULE_CSV
+    csv_saver(long_data, SCHEDULE_CSV)
+    print(f"\n[Fox]: Saved to {SCHEDULE_CSV}")
