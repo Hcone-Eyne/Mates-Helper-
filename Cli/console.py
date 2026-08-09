@@ -36,49 +36,66 @@ def display_table(data):
 # linking up console.py with main.py to be used when user called!
 # this fuction used to choose what the user want, expanision of Schedule program
 def run_scheduler():
-    # print the options
-    console.print(Panel.fit(
-        "[bold blue]1[/bold blue]. View current schedule\n"
-        "[bold blue]2[/bold blue]. Upload new schedule\n"
-        "[bold blue]3[/bold blue]. Ask the bot\n"
-        "[bold blue]0[/bold blue]. Back to main menu",
-        title = "[Fox]: Schedule"
-    )
-    )
-    # letting user to choose
-    choice = input("\n[Fox]: Choose: ").strip()
+    while True:
+        # adding failsafe!
+        try:
+            # print the options
+            console.print(Panel.fit(
+                "[bold blue]1[/bold blue]. View current schedule\n"
+                "[bold blue]2[/bold blue]. Upload new schedule\n"
+                "[bold blue]3[/bold blue]. Ask the bot\n"
+                "[bold blue]0[/bold blue]. Back to main menu",
+                title = "[Fox]: Schedule"
+            )
+            )
+            # letting user to choose
+            choice = input("\n[Fox]: Choose: ").strip()
 
-    # choice condition starts here
-    if choice == "1":
-        df = pd.read_csv(SCHEDULE_CSV)
-        display_table(df)
-    elif choice == "2":
-        # update user a hint?
-        console.print("[Fox]: Drag and Drop Works Too")
-        image_path = input("\n[Fox]: Path to new schedule image: ").strip()
+            # choice condition starts here
+            if choice == "1":
+                df = pd.read_csv(SCHEDULE_CSV)
+                display_table(df)
+            elif choice == "2":
+                # update user a hint?
+                console.print("[Fox]: Drag and Drop Works Too")
+                image_path = input("\n[Fox]: Path to new schedule image: ").strip()
 
-        # extracting the table
-        df = extract_table(image_path)
-        # find the corrupted details
-        df = corrupt_finder(df)
-        # fix the corrupted details
-        df = corrupt_fixer(df)
-        # let user review and edit the corrupted file
-        df = review_edit(df)
+                # extracting the table
+                df = extract_table(image_path)
+                # find the corrupted details
+                df = corrupt_finder(df)
+                # fix the corrupted details
+                df = corrupt_fixer(df)
+                # let user review and edit the corrupted file
+                df = review_edit(df)
 
-        # reshape the long format
-        long_df = text_counter(df)
-        # save the file using saver function
-        csv_saver(long_df, SCHEDULE_CSV)
-        # update it to user
-        console.print("[Fox]: Schedule updated!.")
-    elif choice == "3":
-        # load the scheduler
-        df = load_schedule()
-        # ask Fox about the schedule 
-        keyword = input("[Fox]: Ask: ").strip()
-        # it displays the schedule
-        print(query_handler(keyword, df))
+                # reshape the long format
+                long_df = text_counter(df)
+                # save the file using saver function
+                csv_saver(long_df, SCHEDULE_CSV)
+                # update it to user
+                console.print("[Fox]: Schedule updated!.")
+            elif choice == "3":
+                # load the scheduler
+                df = load_schedule()
+                # ask Fox about the schedule 
+                keyword = input("[Fox]: Ask: ").strip()
+                # it displays the schedule
+                print(query_handler(keyword, df))
+            # adding this to prevent infinte loop!
+            elif choice == "0":
+                break
+        except Exception as e:
+            console.print(f"[Fox]: Error Occured: {e}")
+        # this catch the file not found error
+        except FileNotFoundError:
+            console.print(f"[Fox]: Couldn't find a file at '{image_path}' - Check the path and try again....")
+            pass
+            # this catch value not found error
+        except ValueError:
+            console.print("[Fox]: Invalid Input, Try again.....")
+            pass
+
 
 if __name__ == "__main__":
     # reading the csv file
