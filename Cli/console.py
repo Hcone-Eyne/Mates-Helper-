@@ -9,7 +9,6 @@ from Path_mapper import SCHEDULE_CSV, DATA_ROOT
 
 # MOre imports
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
-from Schedule_Bot.schedule_pharaser import csv_saver, text_counter
 from bot import load_schedule, query_handler
 
 # creating a console object

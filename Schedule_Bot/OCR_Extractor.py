@@ -2,9 +2,6 @@
 import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path as pdf_path
-from Schedule_Bot.schedule_pharaser import time_extractor
-from Schedule_Bot.schedule_pharaser import day_splitter
-from Schedule_Bot.schedule_pharaser import Days
 from datetime import datetime
 
 # ahh too much library!
