@@ -3,6 +3,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 import pandas as pd
+from Schedule_Bot.schedule_pharaser import csv_saver, reshape_to_long
 
 # Importing Roots
 from Path_mapper import SCHEDULE_CSV, DATA_ROOT
@@ -69,7 +70,7 @@ def run_scheduler():
                 df = review_edit(df)
 
                 # reshape the long format
-                long_df = text_counter(df)
+                long_df = reshape_to_long(df)
                 # save the file using saver function
                 csv_saver(long_df, SCHEDULE_CSV)
                 # update it to user
@@ -93,6 +94,9 @@ def run_scheduler():
             # this catch value not found error
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
+            pass
+        except ValueError:
+            console.print("[Fox]: Invalid Choice.....")
             pass
 
 

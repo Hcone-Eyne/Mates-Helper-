@@ -11,6 +11,9 @@ from pdf2image import convert_from_path as pdf_path
 from img2table.document import Image as TableImage # i used TableImage to prevent the error ( u have used that image variable agian that's why)
 from img2table.ocr import TesseractOCR
 
+# AgAIN TOo MUch LibraRY!
+from Schedule_Bot.schedule_pharaser import Days
+
 # adding date and time!
 def datatime_fetcher(prompt):
     while True:
