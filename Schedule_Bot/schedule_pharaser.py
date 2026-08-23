@@ -15,8 +15,8 @@ def reshape_to_long(data):
     long_data = {"day": [], "subject": [], "time_start": [], "time_end": [], "books_needed": []}
 
     # adding colums data for day and period
-    day_column = data.colums[0]
-    period_colums = data.column[1:]
+    day_column = data.columns[0]
+    period_colums = data.columns[1:]
 
     # adding loop to iterate throught the schedule
     for _, row in data.iterrows(): # iteration through day column!
