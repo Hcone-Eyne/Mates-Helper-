@@ -35,7 +35,8 @@ def image_extractor(image):
     img = img.convert("L")
     # upscaling the image by a factor of 3 to improve OCR accuracy or upscale = 300%
     img = img.resize((img.width * 3, img.height * 3))
-    # maximizing the contrast of the image to make the text stand out more against the background
+    # maximizing the contrast of the
+    #  image to make the text stand out more against the background
     img = ImageOps.autocontrast(img)
     # extracting text from image using pytesseract and config="--psm 6" sets the Page Segmentation Mode to assume a single uniform block of text.
     text = pytesseract.image_to_string(img, config="--psm 6")

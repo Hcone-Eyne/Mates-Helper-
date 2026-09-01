@@ -12,6 +12,10 @@ from Path_mapper import SCHEDULE_CSV, DATA_ROOT
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
 from bot import load_schedule, query_handler
 
+# from Finance_bot
+from Finance_bot.operations_finder import operation_finder
+from Memory.memory_storer import memory_lister, memory_catcher
+
 # creating a console object
 console = Console()
 
@@ -99,6 +103,52 @@ def run_scheduler():
             console.print("[Fox]: Invalid Choice.....")
             pass
 
+def run_finance_bot():
+    # this loops the finance bot until user wants to exit
+    while True:
+        # this try-except block is used to catch any errors that may occur during the execution of the finance bot
+        try:
+            # print the options
+            console.print(Panel.fit(
+                "[bold blue]1[/bold blue]. Perform an operation\n"
+                "[bold blue]0[/bold blue]. Back to main menu",
+                title = "[Fox]: Finance Bot"
+            )
+            )
+            # letting user to choose
+            choice = input("\n[Fox]: Choose: ").strip()
+
+            # choice condition starts here
+            if choice == "1":
+                # to get expression from user
+                expression = input("[Fox]: Enter the operation (or type Finished to exit): ").strip()
+                # checking if user wants to exit the finance bot 
+                if expression.lower() == "finished":
+                    console.print("[Fox]: Exiting Finance Bot.....")
+                    memory_lister()  # call memory_lister to display previous operations
+                    break 
+
+                # using the operation_finder function to perform the operation
+                result = operation_finder(expression)
+                # printing the result to the console
+                console.print(f"[Fox]: Result: {result}")
+                # this stores the expression and result in memory_log for future reference
+                memory_catcher(expression, result)
+            # adding this to prevent infinte loop!
+            elif choice == "0":
+                console.print("[Fox]: Exiting Finance Bot.....")
+                break
+        # this catch the file not found error
+        except Exception as e:
+            console.print(f"[Fox]: Error Occured: {e}")
+        # this catch value not found error
+        except ValueError:
+            console.print("[Fox]: Invalid Input, Try again.....")
+            pass
+        # this catches the keyboard interrupt error to exit the finance bot.....
+        except KeyboardInterrupt:
+            console.print("[Fox]: Exiting Finance Bot.....")
+            memory_lister()  # calls the memory_lister to display previous operations
 
 if __name__ == "__main__":
     # reading the csv file

@@ -5,6 +5,10 @@ from Cli.console import run_scheduler
 import pandas as pd
 from Path_mapper import SCHEDULE_CSV
 
+
+# imports from finance_bot!
+from Cli.console import run_finance_bot
+
 # adding console variable
 console = Console()
 
@@ -14,7 +18,7 @@ def menu_bar():
     console.print(Panel.fit(
     "[bold blue]1[/bold blue].Schedule\n"
     "[bold blue]2[/bold blue].Finance\n"
-    "[bold blue]3[/bold blue].Haptics\n"
+    "[bold blue]3[/bold blue].[On Progress...]\n"
     "[bold blue]4[/bold blue].Exit\n",
     title = "[Fox]: Main Menu"))
 
@@ -33,7 +37,8 @@ def run():
             print("[Fox]: Entering Schedule")
             run_scheduler()
         elif choice == "2":
-            console.print("[Fox]: Finance module not built yet")
+            console.print("[Fox]: Preparing Finance Bot")
+            run_finance_bot()
         elif choice == "3":
             console.print("[Fox]: Haptics module not built yet")
         elif choice == "4":

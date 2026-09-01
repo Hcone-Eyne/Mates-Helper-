@@ -1,32 +1,49 @@
 # this part is about auto identy the logic of arithmetic operations
 
+# this program limits are, only 2 numbers at a time
+
+# TODO: add memory feature (need to have erase memory and auto memory catcher!), and support for more variable and need to add cli based graph
+
+# importing nessary modules!
+from rich.console import Console
 # this function is going to handle all arithmetic operations and extraction
 def operation_finder(num):
-
-    # converting string into list
-    extractor = list(num)
 
     # arithmetic operation list
     operation_list = ["+", "-", "/", "*"]
 
-    # operation store
-    operand_variable = 0
+    # variables to hold the operation and the numbers
+    left = "" # handles left side of list
+    operator = None # currently operator value = 0
+    right = "" # handles right side of list
 
-    # temp variable for all arithmetic process
-    temp_variable = 0
+    # creating a loop to check the operators and numbers
+    for char in num:
+        # this condition checks if the value is presented in operation list (find the operand!)
+        if char in operation_list:
+            operator = char
+        # else it builds the left
+        elif operator is None:
+            left += char
+        # after operand found, right side starts to get build!
+        else:
+            right += char
 
-    # string_list = 0
+    # converting left and right to do arithmetic operations
+    left = int(left)
+    right = int(right)
 
-    # this loop yea, go throigh the list and figure what is operand..
-    for i in range(len(extractor)):
-        if extractor[i] and extractor[i+1] is not operation_list:
-            join = "".join(map(str,extractor[i]))
-            print(join)
-        if extractor[i] in operation_list:
-            operand_variable = extractor[i]
-            temp_variable = extractor.remove(extractor[i])
-            temp_variable = extractor.append(operand_variable)
-            print(extractor)
-        if operand_variable == "+": print(extractor[i]+extractor[i+1])
+    # appliying those arithmetic operations!
+    if operator == "+":
+        return left + right
+    elif operator == "-":
+        return left - right
+    elif operator == "*":
+        return left * right
+    elif operator == "/":
+        return left / right
+    else:
+        Console.print("Invalid input, Try again.....")
 
-operation_finder("12+12")
+if  __name__ == "__main__":
+    operation_finder("12+3")

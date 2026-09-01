@@ -4,3 +4,7 @@ OCR_Extractor
 TODO: Fix the Upscalling in OCR, (blocked on image quality)
 Get higher-res source (direct portal download, not screenshot) OR
 Try strip-by-strip OCR cropping
+
+
+opearation_finder!
+TODO: add memory feature (need to have erase memory and auto memory catcher!), and support for more variable and need to add cli based graph 
