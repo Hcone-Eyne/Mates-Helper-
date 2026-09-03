@@ -4,15 +4,20 @@
 from rich.console import Console
 from rich.panel import Panel
 import pandas as pd
-from Cli import console
-import matplotlib.pyplot as plt
+import plotext as plt2
 
+console = Console()
 # ading a variable to store the previous operations and results
 memory_log = []
 
 # creating a function to store the previous operations and results also it gets called after every operation is performed
 def memory_catcher(expression, result):
-    memory_log.append((expression, result))
+    memory_log.append({"expression": expression, "result": result})
+
+# this function handles the memmory log / eraser!
+def memory_eraser():
+    memory_log.clear()
+    console.print("[Fox]: Memory erased.")
 
 # this function is going to be used to pandas dataframe, so pandas and plotting tools can be used.....
 def memory_dataframe():
@@ -31,10 +36,11 @@ def memory_lister():
     # showing the menu!
     console.print(
     Panel.fit(
-        "[bold cyan]1.[/bold cyan] Line graph (trend across entries)\n"
-        "[bold cyan]2.[/bold cyan] Bar chart (each expression vs its result)\n"
-        "[bold cyan]3.[/bold cyan] Histogram (distribution of results)\n"
-        "[bold cyan]0.[/bold cyan] Skip",
+        "[bold blue]1.[/bold blue] Line graph (trend across entries)\n"
+        "[bold blue]2.[/bold blue] Bar chart (each expression vs its result)\n"
+        "[bold blue]3.[/bold blue] Histogram (distribution of results)\n"
+        "[bold blue]4.[/bold blue] Erase memory\n"
+        "[bold blue]0.[/bold blue] Skip",
         title="[Fox]: Visualization Options"
     )
 )
@@ -52,6 +58,10 @@ def memory_lister():
     elif choice == "3":
         # it will plot the histogram of the previous operations and results
         plot_histogram(df)
+    elif choice == "4":
+        # it will erase the memory of the previous operations and results
+        memory_log.clear()
+        return
     elif choice == "0":
         # it will skip the graphing of the previous operations and results
         console.print("[Fox]: Skipping the graphing of previous operations.")
@@ -60,31 +70,52 @@ def memory_lister():
         # if user enters an invalid choice
         console.print("[Fox]: Invalid choice. Please try again.")
 
+    # adding memory eraser feature
+    memory_log.clear()
+    console.print("[Fox]: Memory erased.")
+
 # this function is going to show off the graph in line and rest is all we know1
 def plot_line_line(df):
-    plt.plot(df.index, df["result"], marker='o')
-    plt.title("Results over Sessions")
-    plt.xlabel("Entry Number")
-    plt.ylabel("Result")
-    plt.grid()
-    plt.show()
+    plt2.plot(df.index.tolist(), df["result"].tolist())
+    plt2.title("Results over Sessions")
+    plt2.xlabel("Entry Number")
+    plt2.ylabel("Result")
+    plt2.grid(True, True)
+    plt2.show()
 
 # this function is going to show off the graph in bar chart
 def plot_bar(df):
-    plt.bar(df["expression"], df["result"])
-    plt.title("Results over Expressions")
-    plt.xlabel("Expression")
-    plt.ylabel("Result")
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    plt.show()
+    plt2.bar(df["expression"].tolist(), df["result"].tolist())
+    plt2.title("Results over Expressions")
+    plt2.xlabel("Expression")
+    plt2.ylabel("Result")
+    plt2.tight_layout()
+    plt2.show()
 
 # this function is going to show off the graph in histogram
-def plot_histogram(df):
-    plt.hist(df["result"], bins=10, edgecolor='black')
-    plt.title("Distribution of Results")
-    plt.xlabel("Result")
-    plt.ylabel("Frequency")
-    plt.grid(axis='y')
-    plt.show()
+def plot_histogram(df): 
+    plt2.hist(df["result"].tolist(), bins=10)
+    plt2.title("Distribution of Results")
+    plt2.xlabel("Result")
+    plt2.ylabel("Frequency")
+    plt2.grid(False, True)
+    plt2.show()
 
+if __name__ == "__main__":
+    console.print("[bold green]Populating sample finance log data...[/bold green]\n")
+
+    sample_data = [
+        ("100 + 50", 150.0),
+        ("200 * 1.05", 210.0),
+        ("150 - 30", 120.0),
+        ("500 / 2", 250.0),
+        ("250 + 100", 350.0),
+        ("120 * 1.2", 144.0),
+        ("350 - 200", 150.0),
+        ("150 + 100", 250.0),
+    ]
+
+    for expr, res in sample_data:
+        memory_catcher(expr, res)
+
+    memory_lister()

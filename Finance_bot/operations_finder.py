@@ -3,7 +3,7 @@
 # v2 added: This now supports more than 2 numbers, with proper order
 # this program limits are, only 2 numbers at a time
 
-# TODO: add memory feature erase memory, and need to add cli based graph
+
 
 # importing nessary modules!
 from rich.console import Console
