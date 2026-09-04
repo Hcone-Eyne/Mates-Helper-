@@ -11,6 +11,7 @@ from Path_mapper import SCHEDULE_CSV, DATA_ROOT
 # MOre imports
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
 from bot import load_schedule, query_handler
+from Finance_bot.Expense_analyzer import run_expense_analyzer
 
 # from Finance_bot
 from Finance_bot.operations_finder import operation_finder
@@ -111,6 +112,7 @@ def run_finance_bot():
             # print the options
             console.print(Panel.fit(
                 "[bold blue]1[/bold blue]. Perform an operation\n"
+                "[bold blue]2[/bold blue]. Analyze expense statement (PDF/CSV)\n"
                 "[bold blue]0[/bold blue]. Back to main menu",
                 title = "[Fox]: Finance Bot"
             )

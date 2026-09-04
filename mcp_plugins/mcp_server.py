@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from bot import load_schedule, query_handler
 from Finance_bot.operations_finder import operation_finder
 from Memory.memory_storer import memory_catcher, memory_eraser, memory_dataframe
+from Finance_bot.Expense_analyzer import load_statement, build_summary
 
 # setting up mcp!
 mcp = FastMCP("Fox-Helper")
@@ -72,6 +73,48 @@ def finance_clear_history():
     # erase memory!
     memory_eraser()
     return "[Fox]: Memory erased."
+
+@mcp.tool()
+# this function uses Expense_analyser.py to do operations such as read PDF/CSV, Analysis them etc.....
+def expense_summary(path:str):
+    """Analyze a bank/GPay statement (CSV or PDF) and return this month's
+    category breakdown, total spend, and comparison to last month."""
+
+    # conditions starts here
+    try:
+        # this condition loads the file
+        df = load_statement(path)
+    # if error occurs show them!
+    except Exception as e:
+        return f"[Fox]: {e}"
+    
+    # build a summary so user can see that
+    summary = build_summary(df)
+
+    # this condition checks if the summary has context or not!
+    if summary is None:
+        # if not say No transactions found in file!
+        return "[Fox]: No transactions found."
+
+    # this line tels about current month status fetched from file!
+    lines = [f"This Month Track ({summary['month']})"]
+
+    # this loops through the file and gets those data!
+    for category, amount in summary["by_category"].items():
+        # in simple term calculation to obtain current status.....
+        sign = "+" if amount >= 0 else "-"
+        lines.append(f"{category}: {sign}{abs(amount):.0f}")
+    lines.append(f"Total spend = {summary['total_spend']:.0f}")
+
+    # this condition compares with previous month data and shows that to user!
+    if summary["prev_spend"] not in (None, 0):
+        # in simple term calculation to obtain how much money is spent!!!!!
+        diff = summary["total_spend"] - summary["prev_spend"]
+        pct = (diff / summary["prev_spend"]) * 100
+        direction = "extra" if diff >= 0 else "less"
+        lines.append(f"that's {pct:+.0f}% which is {direction} \u20b9{abs(diff):.0f} compared to previous month")
+    # shows this to user!
+    return "\n".join(lines)
 
 if __name__ == "__main__":
     mcp.run()
