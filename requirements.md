@@ -8,3 +8,5 @@ plotext==5.2.8
 asyncio
 websockets
 fastmcp
+json
+pdfplumber
