@@ -12,6 +12,7 @@ app = FastAPI()
 # creating a blueprint of the APp!
 class TaskRequest(BaseModel):
     description: str
+    provider: str = "anthropic"
 
 # @app is a way to trigger like, to do a specific function in app!
 
@@ -19,7 +20,7 @@ class TaskRequest(BaseModel):
 # this function is going to handle the process of submiting the task
 def submit_task (req: TaskRequest):
     task_id = task_store.add_task(req.description)
-    result = run_task(req.description)
+    result = run_task(req.description, req.provider)
     task_store.complete_task(task_id, result)
     return {"id": task_id, "result": result}
 

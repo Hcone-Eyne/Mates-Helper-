@@ -21,7 +21,7 @@ class BrowserRequest(BaseModel):
 @app.post("/browse")
 # this function is used to monitor the browser request at sametime gives the agent result
 def browse(req:BrowserRequest):
-    with sync_playwright as p:
+    with sync_playwright() as p:
         browser = p.chromium.launch(proxy = {"server": PROXY_SERVER})
         page = browser.new_page()
         page.goto(req.url, wait_until = "load", timeout = 30000)

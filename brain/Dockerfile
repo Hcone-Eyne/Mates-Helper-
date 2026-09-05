@@ -1,5 +1,3 @@
-# This is used to create to have the nessary packages!
-
 FROM python:3.11-slim
 
 RUN pip install --no-cache-dir fastapi uvicorn anthropic requests

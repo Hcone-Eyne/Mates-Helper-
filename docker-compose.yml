@@ -1,10 +1,5 @@
-# docker-compose is used to create a sandbox environment for agent to work on
-# this contains web_browser, and a custom made app (we done that in Agent_plugins)
-
-# version!
 version: "3.9"
 
-# mentioning the required service
 services:
   mitm-proxy:
     build: ./proxy
@@ -13,7 +8,6 @@ services:
       - ./logs:/logs
     networks:
       - sandbox-net
-
     # No ports published to the host — the agent can only reach this
     # over the internal sandbox-net and only for proxying traffic.
 
@@ -28,8 +22,8 @@ services:
       - HTTP_PROXY=http://mitm-proxy:8080
       - HTTPS_PROXY=http://mitm-proxy:8080
     cap_add:
-      - NET_ADMIN   
-      # needed ONLY by entrypoint.sh (as root) to set the
+      - NET_ADMIN
+      # needed ONLY by entrypoint.sh (as root) to set the iptables rules
     networks:
       - sandbox-net
     # No volume gives it access to ./logs. It cannot see, edit, or
@@ -49,7 +43,7 @@ services:
     volumes:
       - ./data:/data
     ports:
-      - "7000:7000"   
+      - "7000:7000"
       # entry point: POST /submit_task, GET /tasks
     networks:
       - sandbox-net
