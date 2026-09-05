@@ -28,7 +28,7 @@ def response(flow: http.HTTPFlow):
 
     # this will write the report to the log path
     with open(LOG_PATH, "a") as f:
-        f.write(json.dump(entry) + "\n")
+        f.write(json.dumps(entry) + "\n")
 
 def error(flow:http.HTTPFlow):
     # this is the structure of the entry!

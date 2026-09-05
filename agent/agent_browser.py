@@ -29,7 +29,7 @@ def main():
         browser = p.chromium.launch(proxy = {"server": PROXY_SERVER})
         page = browser.new_page()
 
-        run_task(page)
+        run_task(page, "https://example.com")
 
         browser.close()
 
