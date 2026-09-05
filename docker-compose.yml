@@ -1,0 +1,61 @@
+# docker-compose is used to create a sandbox environment for agent to work on
+# this contains web_browser, and a custom made app (we done that in Agent_plugins)
+
+# version!
+version: "3.9"
+
+# mentioning the required service
+services:
+  mitm-proxy:
+    build: ./proxy
+    container_name: sandbox-proxy
+    volumes:
+      - ./logs:/logs
+    networks:
+      - sandbox-net
+
+    # No ports published to the host — the agent can only reach this
+    # over the internal sandbox-net and only for proxying traffic.
+
+  agent:
+    build: ./agent
+    container_name: sandbox-agent
+    depends_on:
+      - mitm-proxy
+    environment:
+      - PROXY_HOST=mitm-proxy
+      - PROXY_PORT=8080
+      - HTTP_PROXY=http://mitm-proxy:8080
+      - HTTPS_PROXY=http://mitm-proxy:8080
+    cap_add:
+      - NET_ADMIN   
+      # needed ONLY by entrypoint.sh (as root) to set the
+    networks:
+      - sandbox-net
+    # No volume gives it access to ./logs. It cannot see, edit, or
+    # delete what the proxy records about it.
+    # It DOES accept inbound calls on :9000 from brain — that's fine,
+    # the lockdown in entrypoint.sh only restricts OUTBOUND traffic.
+
+  brain:
+    build: ./brain
+    container_name: sandbox-brain
+    depends_on:
+      - agent
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_HOST=agent
+      - AGENT_PORT=9000
+    volumes:
+      - ./data:/data
+    ports:
+      - "7000:7000"   
+      # entry point: POST /submit_task, GET /tasks
+    networks:
+      - sandbox-net
+    # Normal network access — this is the "brain," not the sandboxed
+    # hands, so it talks to Claude's, Chatgpt's etc..... API directly.
+
+networks:
+  sandbox-net:
+    driver: bridge

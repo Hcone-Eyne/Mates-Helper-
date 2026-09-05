@@ -136,6 +136,9 @@ def run_finance_bot():
                 console.print(f"[Fox]: Result: {result}")
                 # this stores the expression and result in memory_log for future reference
                 memory_catcher(expression, result)
+            # if choice is 2, run the Expense_analyser!
+            elif choice == "2":
+                run_expense_analyzer()
             # adding this to prevent infinte loop!
             elif choice == "0":
                 console.print("[Fox]: Exiting Finance Bot.....")

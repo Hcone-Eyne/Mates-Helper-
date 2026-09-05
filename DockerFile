@@ -1,0 +1,12 @@
+# This is used to create to have the nessary packages!
+
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir fastapi uvicorn anthropic requests
+
+WORKDIR /app
+COPY app.py orchestrator.py tools.py task_store.py ./
+
+VOLUME ["/data"]
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7000"]
