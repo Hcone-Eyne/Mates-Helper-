@@ -1,4 +1,5 @@
 # importing the required libraries
+import os
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -44,6 +45,8 @@ def run_scheduler():
     while True:
         # adding failsafe!
         try:
+            # this prevent reprint
+            os.system('clear')
             # print the options
             console.print(Panel.fit(
                 "[bold blue]1[/bold blue]. View current schedule\n"
@@ -60,6 +63,7 @@ def run_scheduler():
             if choice == "1":
                 df = pd.read_csv(SCHEDULE_CSV)
                 display_table(df)
+                input("\nPress Enter to continue...")
             elif choice == "2":
                 # update user a hint?
                 console.print("[Fox]: Drag and Drop Works Too")
@@ -80,35 +84,35 @@ def run_scheduler():
                 csv_saver(long_df, SCHEDULE_CSV)
                 # update it to user
                 console.print("[Fox]: Schedule updated!.")
+                input("\nPress Enter to continue...")
             elif choice == "3":
                 # load the scheduler
                 df = load_schedule()
-                # ask Fox about the schedule 
+                # ask Fox about the schedule
                 keyword = input("[Fox]: Ask: ").strip()
                 # it displays the schedule
                 print(query_handler(keyword, df))
+                input("\nPress Enter to continue...")
             # adding this to prevent infinte loop!
             elif choice == "0":
                 break
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
-        # this catch the file not found error
+            input("\nPress Enter to continue...")
         except FileNotFoundError:
             console.print(f"[Fox]: Couldn't find a file at '{image_path}' - Check the path and try again....")
-            pass
-            # this catch value not found error
+            input("\nPress Enter to continue...")
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
-            pass
-        except ValueError:
-            console.print("[Fox]: Invalid Choice.....")
-            pass
+            input("\nPress Enter to continue...")
 
 def run_finance_bot():
     # this loops the finance bot until user wants to exit
     while True:
         # this try-except block is used to catch any errors that may occur during the execution of the finance bot
         try:
+            # this prevents the reprint issue!
+            os.system('clear')
             # print the options
             console.print(Panel.fit(
                 "[bold blue]1[/bold blue]. Perform an operation\n"
@@ -124,11 +128,11 @@ def run_finance_bot():
             if choice == "1":
                 # to get expression from user
                 expression = input("[Fox]: Enter the operation (or type Finished to exit): ").strip()
-                # checking if user wants to exit the finance bot 
+                # checking if user wants to exit the finance bot
                 if expression.lower() == "finished":
                     console.print("[Fox]: Exiting Finance Bot.....")
                     memory_lister()  # call memory_lister to display previous operations
-                    break 
+                    break
 
                 # using the operation_finder function to perform the operation
                 result = operation_finder(expression)
@@ -136,9 +140,11 @@ def run_finance_bot():
                 console.print(f"[Fox]: Result: {result}")
                 # this stores the expression and result in memory_log for future reference
                 memory_catcher(expression, result)
+                input("\nPress Enter to continue...")
             # if choice is 2, run the Expense_analyser!
             elif choice == "2":
                 run_expense_analyzer()
+                input("\nPress Enter to continue...")
             # adding this to prevent infinte loop!
             elif choice == "0":
                 console.print("[Fox]: Exiting Finance Bot.....")
@@ -146,10 +152,11 @@ def run_finance_bot():
         # this catch the file not found error
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
+            input("\nPress Enter to continue...")
         # this catch value not found error
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
-            pass
+            input("\nPress Enter to continue...")
         # this catches the keyboard interrupt error to exit the finance bot.....
         except KeyboardInterrupt:
             console.print("[Fox]: Exiting Finance Bot.....")

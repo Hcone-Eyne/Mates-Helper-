@@ -1,4 +1,5 @@
 # importing nessary library
+import os
 from rich.console import Console
 from rich.panel import Panel
 from Cli.console import run_scheduler
@@ -26,6 +27,7 @@ def menu_bar():
 def run():
     # adding loop to ask it repeatively
     while True:
+        os.system('clear')
         # showing the menu_bar
         menu_bar()
         # leting user to choose option
@@ -34,18 +36,18 @@ def run():
 
         # choice based execution
         if choice == "1":
-            print("[Fox]: Entering Schedule")
             run_scheduler()
         elif choice == "2":
-            console.print("[Fox]: Preparing Finance Bot")
             run_finance_bot()
         elif choice == "3":
             console.print("[Fox]: Haptics module not built yet")
+            input("\nPress Enter to continue...")
         elif choice == "4":
             console.print("[Fox]: See you Soon Boss.....")
             break
         else:
             console.print("[Fox]: Invalid option, try again.")
+            input("\nPress Enter to continue...")
 
 
         
