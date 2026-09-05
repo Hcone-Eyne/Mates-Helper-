@@ -13,3 +13,4 @@ pdfplumber
 mitmproxy
 fastapi
 sqlite3
+anthropic
