@@ -10,3 +10,6 @@ websockets
 fastmcp
 json
 pdfplumber
+mitmproxy
+fastapi
+sqlite3

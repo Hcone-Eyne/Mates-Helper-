@@ -1,2 +1,11 @@
 
-TODO:  need to add cli based graph 
+#TODO:  need to add cli based graph 
+
+Agent_Plugins
+Ports and Other Stuffs Are hardcoded ru, have to fix them!
+
+ALSo Cli is like reprinting itsself again and agin, need to fix that!
+
+Tools.py
+# TODO: reuse / import the finance_bot function
+ # TODO: Again reuse / import the schedule_BOT function
