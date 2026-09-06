@@ -43,7 +43,7 @@ services:
     volumes:
       - ./data:/data
     ports:
-      - "7000:7000"
+      - "7010:7000"
       # entry point: POST /submit_task, GET /tasks
     networks:
       - sandbox-net
