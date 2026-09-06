@@ -8,14 +8,15 @@ import uuid
 
 import websockets
 from fastmcp import FastMCP
+import os
 
 
 # setting up mcp!
 mcp = FastMCP("Fox-Agent-Gateway")
 
 # setting up the route!
-AGENT_HOST = "0.0.0.0"
-AGENT_PORT = 8765
+AGENT_HOST = os.environ.get("AGENT_GATEWAY_HOST", "0.0.0.0")
+AGENT_PORT = int(os.environ.get("AGENT_GATEWAY_PORT", "8765"))  
 AGENT_TIMEOUT = 20  # time exceed, process is cut off instead of loop
 
 

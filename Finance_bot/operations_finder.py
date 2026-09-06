@@ -13,13 +13,34 @@ import re
 def operation_finder(num):
 
     # tokenizing the input string to extract numbers and operators
-    # like auto sort numbers and operators in a list.....
     tokens = re.findall(r'\d+\.?\d*|[+\-*/]', num)
 
     # checking if user entered valid expression
     if not tokens:
         print("[Fox]: Invalid expression. Please enter a valid arithmetic expression.")
         return
+
+    # this part is ment to handle negative integers!
+    merged = []  # (handles cases like "-5+3" or "5*-3" where '-' means sign, not subtraction)
+    # initialising the i ahh
+    i = 0
+    # this loop to iterate to tokens
+    while i < len(tokens):
+        # reference toke value
+        tok = tokens[i]
+        # this conditions checks for nessary tokens like "-"
+        if tok == "-" and (i == 0 or merged[-1] in "+-*/" ) and i+1 < len(tokens):
+            merged.append("-" + tokens[i+1])
+            # increment value of i
+            i+=2
+            continue
+        # if those condition isn't meet in the current token this gets executed
+        merged.append(tok)
+        i+= 1
+
+    # merged tokens is used also used by postfix function below
+    tokens = merged
+
 
     # this function is going to convert tokens into int / float
     def to_num(tokens):

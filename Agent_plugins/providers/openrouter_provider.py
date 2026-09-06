@@ -8,7 +8,7 @@ from . import openai_compatible
 def chat(prompt):
     return openai_compatible.chat(
         prompt,
-        api_key = os.environ("OPENROUTER_API_KEY"),
+        api_key = os.environ["OPENROUTER_API_KEY"],
         base_url = "https://openrouter.ai/api/v1",
         model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o")
     )

@@ -2,7 +2,6 @@
 
 # importing nessary modules
 import pandas as pd
-import websockets
 from fastmcp import FastMCP
 
 # now importing from created python modules
