@@ -162,6 +162,73 @@ def run_finance_bot():
             console.print("[Fox]: Exiting Finance Bot.....")
             memory_lister()  # calls the memory_lister to display previous operations
 
+def run_file_manager():
+    from File_Manager import organizer, db
+    from pathlib import Path
+    organizer.ensure_vault()
+    while True:
+        try:
+            os.system('clear')
+            console.print(Panel.fit(
+                "[bold blue]scan[/bold blue]                 - pull in anything new from Inbox\n"
+                "[bold blue]find <term>[/bold blue]          - search the vault by keyword\n"
+                "[bold blue]ls [category][/bold blue]        - list everything (or one category)\n"
+                "[bold blue]move <name> <category>[/bold blue] - re-file a result and teach Fox\n"
+                "[bold blue]0[/bold blue] - back to main menu",
+                title="[Fox]: File Manager"
+            ))
+            console.print(f"[Fox]: Drop files into {organizer.INBOX} anytime.")
+            cmd = input("\n[Fox]: > ").strip()
+
+            if cmd == "0":
+                break
+            elif cmd == "scan":
+                new_files = [p for p in organizer.INBOX.iterdir() if p.is_file()]
+                if not new_files:
+                    console.print("[Fox]: Inbox is empty, nothing to file.")
+                for path in new_files:
+                    dest, category = organizer.organize_file(path)
+                    console.print(f"[Fox]: Filed '{dest.name}' -> {category}")
+                input("\nPress Enter to continue...")
+            elif cmd.startswith("find "):
+                query = cmd[len("find "):].strip()
+                results = db.search_files(query)
+                if not results:
+                    console.print(f"[Fox]: Nothing matching '{query}'.")
+                for r in results:
+                    console.print(f"[Fox]: {r['name']}  ({r['category']})  -> {r['path']}")
+                input("\nPress Enter to continue...")
+            elif cmd == "ls" or cmd.startswith("ls "):
+                category = cmd[3:].strip() or None
+                results = db.list_all(category)
+                if not results:
+                    console.print("[Fox]: Nothing indexed yet — try 'scan' first.")
+                for r in results:
+                    console.print(f"[Fox]: [{r['category']}] {r['name']}")
+                input("\nPress Enter to continue...")
+            elif cmd.startswith("move "):
+                parts = cmd[len("move "):].split()
+                if len(parts) != 2:
+                    console.print("[Fox]: Usage: move <filename> <category>")
+                else:
+                    name, new_category = parts
+                    matches = [r for r in db.list_all() if r["name"] == name]
+                    if not matches:
+                        console.print(f"[Fox]: Couldn't find '{name}' in the vault.")
+                    else:
+                        dest = organizer.move_and_learn(Path(matches[0]["path"]), new_category)
+                        console.print(f"[Fox]: Moved to {dest} — I'll remember that for next time.")
+                input("\nPress Enter to continue...")
+            else:
+                console.print("[Fox]: Didn't catch that — try scan, find, ls, or move.")
+                input("\nPress Enter to continue...")
+        except KeyboardInterrupt:
+            console.print("[Fox]: Exiting File Manager.....")
+            break
+        except Exception as e:
+            console.print(f"[Fox]: Error Occured: {e}")
+            input("\nPress Enter to continue...")
+
 if __name__ == "__main__":
     # reading the csv file
     # NEW - using your Path_mapper constant!

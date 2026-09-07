@@ -9,6 +9,7 @@ from bot import load_schedule, query_handler
 from Finance_bot.operations_finder import operation_finder
 from Memory.memory_storer import memory_catcher, memory_eraser, memory_dataframe
 from Finance_bot.Expense_analyzer import load_statement, build_summary
+from File_Manager import db as file_db
 
 # setting up mcp!
 mcp = FastMCP("Fox-Helper")
@@ -114,6 +115,14 @@ def expense_summary(path:str):
         lines.append(f"that's {pct:+.0f}% which is {direction} \u20b9{abs(diff):.0f} compared to previous month")
     # shows this to user!
     return "\n".join(lines)
+
+@mcp.tool()
+def file_find(query: str) -> str:
+    """Search the Vault for a file by keyword (filename or content snippet)."""
+    results = file_db.search_files(query)
+    if not results:
+        return f"[Fox]: Nothing matching '{query}' in the vault."
+    return "\n".join(f"{r['name']} ({r['category']}) -> {r['path']}" for r in results)
 
 if __name__ == "__main__":
     mcp.run()
