@@ -9,3 +9,6 @@ ALSo Cli is like reprinting itsself again and agin, need to fix that!
 Tools.py
 # TODO: reuse / import the finance_bot function
  # TODO: Again reuse / import the schedule_BOT function
+
+ modify_files.py
+ # Todo: This is Permanent Deletion of file, add trash bin feature!k
