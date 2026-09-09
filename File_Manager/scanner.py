@@ -12,7 +12,7 @@ def scan(root: Path = VAULT_ROOT):
 
     # setting up the path
     root = Path(root).expanduser().resolve()
-    root.mkdir(parent = True, exist_ok = True)
+    root.mkdir(parents=True, exist_ok=True)
 
     # variables required for this function
     seen_paths = set()
@@ -22,7 +22,7 @@ def scan(root: Path = VAULT_ROOT):
     for path in root.rglob("*"):
 
         # ignore directories
-        if not path.is_fifo():
+        if not path.is_file():
             continue
 
         # ignore symbolic links for safety!
@@ -61,13 +61,18 @@ def scan(root: Path = VAULT_ROOT):
         indexed += 1
 
     removed = db.remove_file(root, seen_paths)
+    return {
+        "root": str(root),
+        "indexed": indexed,
+        "removed": removed,
+    }
 
 # this function is ment to index a specific file / index
 def scan_file(path :Path):
 
     # getting the path
-    path = Path(root).expanduser().resolve()    
     root = VAULT_ROOT.resolve()
+    path = Path(path).expanduser().resolve()
 
     # prevent indexing files outside the vault
     try:

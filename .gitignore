@@ -1,6 +1,31 @@
-venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# File Manager runtime data
+File_Manager/file_index.db
+File_Manager/file_index.db-*
+File_Manager/user_profs.json
+File_Manager/Vault/
+
+# Test artifacts
+test_output/
+*.log
+
+# OS files
 .DS_Store
-data/*.csv
-data/raw/
+
+# IDE
+.vscode/
+.idea/

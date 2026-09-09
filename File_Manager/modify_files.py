@@ -15,7 +15,7 @@ def _resolve_inside_vault(path):
     root = VAULT_ROOT.resolve()
 
     try:
-        path.resolve_to(root)
+        path.relative_to(root)
     except ValueError:
         raise ValueError(
             f"Path is outside the File Manager Vault: {path}"
@@ -60,11 +60,11 @@ def move_file(source, destination):
     if source.is_dir():
         raise IsADirectoryError(source)
 
-    destination.parent.mkdir(parent = True, exists_ok = True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
 
     destination = _unique_destination(destination)
 
-    shutil.move(str(source, str(destination)))
+    shutil.move(str(source), str(destination))
 
     db.remove_file(source)
 
@@ -96,7 +96,7 @@ def copy_file(source, destination):
     if source.is_dir():
         raise IsADirectoryError(source)
 
-    destination.parent.mkdir(parent = True, exist_ok = True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
 
     destination = _unique_destination(destination)
 
@@ -137,7 +137,7 @@ def rename_file(path, new_name):
     destination = _unique_destination(destination)
 
     # rename if everything is good!
-    path.rename_file(path)
+    path.rename(destination)
 
     stat = destination.stat()
 
@@ -179,6 +179,6 @@ def create_folder(path):
     path = _resolve_inside_vault(path)
 
     # create the folder!
-    path.mkdir(parent = True, exist_ok= True)
+    path.mkdir(parents=True, exist_ok=True)
 
     return path
