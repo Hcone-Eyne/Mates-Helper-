@@ -6,7 +6,7 @@
 # importing the nessary modules!
 import os
 import anthropic
-from tools import TOOLS, dispatcher
+from brain.tools import TOOLS, dispatcher
 
 # note: keep the API key in environment variables so secrets are not hardcoded in the project.
 # initialising claude!

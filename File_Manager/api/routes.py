@@ -79,7 +79,7 @@ def move_file(req: MoveRequest):
     except (FileNotFoundError, ValueError, IsADirectoryError) as e:
         raise HTTPException(
             status_code = 400,
-            details = str(e)
+            detailwe  = str(e)
         )
 
 @router.post("/copy")

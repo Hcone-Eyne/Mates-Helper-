@@ -3,11 +3,17 @@
 # importing the nessary modules
 from fastapi import FastAPI
 from pydantic import BaseModel # this module is used for data validation
-import task_store
-from orchestrator import run_task
+from brain import task_store
+from brain.orchestrator import run_task
+
+# this import for api route exposure
+from File_Manager.api.routes import router as file_manager_router
 
 # initialising the APP!
 app = FastAPI()
+
+# initialising the exposure of those routes created
+app.include_router(file_manager_router)
 
 # creating a blueprint of the APp!
 class TaskRequest(BaseModel):
@@ -33,4 +39,3 @@ def get_task():
 # this function is all about checking the task status
 def health():
     return {"status": "ok"}
-
