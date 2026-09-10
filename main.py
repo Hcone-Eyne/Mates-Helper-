@@ -3,16 +3,15 @@ import os
 from rich.console import Console
 from rich.panel import Panel
 from Cli.console import run_scheduler
-import pandas as pd
-from Path_mapper import SCHEDULE_CSV
-
 
 # imports from finance_bot!
 from Cli.console import run_finance_bot
 
+# imports from fox agent
+from Cli.console import run_fox_agent
+
 # imports from file_manager
 from Cli.console import run_file_manager
-from File_Manager import db as file_db
 
 # adding console variable
 console = Console()
@@ -21,12 +20,13 @@ console = Console()
 def menu_bar():
     # adding options!
     console.print(Panel.fit(
-    "[bold blue]1[/bold blue].Schedule\n"
-    "[bold blue]2[/bold blue].Finance\n"
-    "[bold blue]3[/bold blue].[On Progress...]\n"
-    "[bold blue]4[/bold blue].Files\n"
-    "[bold blue]5[/bold blue].Exit\n",
-    title = "[Fox]: Main Menu"))
+        "[bold blue]1[/bold blue]. Schedule\n"
+        "[bold blue]2[/bold blue]. Finance\n"
+        "[bold blue]3[/bold blue]. Fox Agent\n"
+        "[bold blue]4[/bold blue]. Files\n"
+        "[bold blue]5[/bold blue]. Exit",
+        title="[Fox]: Main Menu"
+    ))
 
 # this function let the user to choose and run program within menubar
 def run():
@@ -45,8 +45,7 @@ def run():
         elif choice == "2":
             run_finance_bot()
         elif choice == "3":
-            console.print("[Fox]: Haptics module not built yet")
-            input("\nPress Enter to continue...")
+            run_fox_agent()
         elif choice == "4":
             run_file_manager()
         elif choice == "5":

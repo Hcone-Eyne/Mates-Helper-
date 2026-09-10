@@ -13,6 +13,7 @@ from Path_mapper import SCHEDULE_CSV, DATA_ROOT
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
 from bot import load_schedule, query_handler
 from Finance_bot.Expense_analyzer import run_expense_analyzer
+from agent.ollama.ollama_agent import FoxAgent
 
 # from Finance_bot
 from Finance_bot.operations_finder import operation_finder
@@ -228,6 +229,56 @@ def run_file_manager():
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
             input("\nPress Enter to continue...")
+
+# this function is ment for to run the fox agent, which performs a agentic tasks
+def run_fox_agent():
+
+    os.system("clear")
+
+
+    try:
+        agent = FoxAgent()
+        console.print(
+            Panel.fit(
+                "\n".join(
+                    [
+                        "[bold green]Connected[/bold green]",
+                        f"Model: [cyan]{agent.model}[/cyan]",
+                        "Type [bold]exit[/bold] to return.",
+                    ]
+                ),
+                title = "[Fox]: Local Agent"
+            )
+        )
+        while True:
+                try:
+                    # getting input / cmd
+                    user_input = input("\n[You]: ").strip()
+
+                    # valaditaing the input
+                    if not user_input:
+                        continue
+
+                    # makin the input lower and checking for required keybord to exit
+                    if user_input.lower() in {
+                        "exit",
+                        "quit",
+                        "0"
+                    }:
+                        break
+
+                    response = agent.ask(user_input)
+
+                    console.print(f"\n[Fox]: {response}")
+
+                except KeyboardInterrupt:
+                    break
+
+    except Exception as e:
+        console.print(
+            f"[red][Fox]: Agent error: {e}[/red]")
+
+        input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
     # reading the csv file

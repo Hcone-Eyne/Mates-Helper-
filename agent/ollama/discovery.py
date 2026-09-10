@@ -16,7 +16,7 @@ def find_ollama_binary():
 
 # this function is to get the host of ollama!
 def get_ollama_host():
-    return shutil.which("ollama")
+    return os.environ.get("OLLAMA_HOST", DEFAULT_HOST).rstrip("/")
 
 # this function is to check the server status
 def check_server(host:str) -> bool:
@@ -24,7 +24,7 @@ def check_server(host:str) -> bool:
     # this condition checks for statement
     try:
         request = urllib.request.Request(
-            f"(host)/api/tags",
+            f"{host}/api/tags",
             method = "GET"
         )
 
@@ -65,7 +65,7 @@ def discover_ollama():
         except Exception:
             models = []
 
-        return {
+    return {
         "installed": binary is not None,
         "binary": binary,
         "host": host,
