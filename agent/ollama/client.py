@@ -35,8 +35,8 @@ class OllamaClient:
             if "qwen2.5:3b-instruct" in name.lower():
                 return name
 
-            # else use the 1st installed model
-            return names[0]
+        # else use the 1st installed model
+        return names[0]
         
     # this function handles the chat
     def chat(self, messages, stream = False):
@@ -79,5 +79,5 @@ class OllamaClient:
                 "content": prompt
             }
         ])
-        return response["messages"]["content"]
+        return response["message"]["content"]
     

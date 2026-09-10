@@ -235,15 +235,19 @@ def run_fox_agent():
 
     os.system("clear")
 
+    # Import tool list so we can show it in the panel
+    from agent.ollama.tools import TOOLS
 
     try:
         agent = FoxAgent()
+        tool_names = ", ".join(TOOLS.keys()) if TOOLS else "(none)"
         console.print(
             Panel.fit(
                 "\n".join(
                     [
                         "[bold green]Connected[/bold green]",
                         f"Model: [cyan]{agent.model}[/cyan]",
+                        f"Tools: [yellow]{tool_names}[/yellow]",
                         "Type [bold]exit[/bold] to return.",
                     ]
                 ),
