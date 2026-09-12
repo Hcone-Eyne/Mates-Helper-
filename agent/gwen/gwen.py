@@ -7,18 +7,22 @@ from typing import Any, Protocol
 
 
 class CriticBackend(Protocol):
+    # Backends must turn Gwen's review messages into a text response.
     def generate(self, messages: list[dict[str, str]]) -> str:
         ...
 
 
 class OllamaCriticBackend:
     def __init__(self, client: Any):
+        # Keep the chat client used to request a critique.
         self.client = client
 
     def generate(self, messages: list[dict[str, str]]) -> str:
+        # Ask Ollama to review the supplied conversation.
         response = self.client.chat(messages)
 
         try:
+            # Support the response shapes commonly returned by chat clients.
             if isinstance(response, dict):
                 if "message" in response and isinstance(response["message"], dict):
                     return response["message"]["content"]
@@ -31,34 +35,45 @@ class OllamaCriticBackend:
                 if "content" in response:
                     return response["content"]
         except (KeyError, TypeError, AttributeError) as exc:
+            # Surface malformed backend data instead of returning a misleading review.
             raise RuntimeError("[Gwen]: Invalid response from critic backend.....") from exc
 
+        # Reject unknown response formats explicitly.
         raise RuntimeError("[Gwen]: Invalid response from critic backend.....")
 
 
-@dataclass
+@dataclass(frozen=True)
 class GwenResult:
+    # Store Gwen's decision, the reviewed reasoning, and her explanation.
     approved: bool
     reasoning: str
     critique: str
 
 
 class Gwen:
+    # Tell the critic what to inspect and prevent it from taking actions.
     SYSTEM_PROMPT = """
     You are Gwen, the critic agent inside Mates Helper.
 
-    Your job is to critically review reasoning produced by Julie.
+    Your job is to critically review both Julie's reasoning and Selina's execution.
+
+    You will receive:
+    - The original user request
+    - Julie's expanded task, plan, and uncertainty
+    - Selina's interpretation, action, success status, result, and error
 
     Check for:
-    - logical mistakes
+    - logical mistakes in Julie's plan
     - missing assumptions
     - incomplete reasoning
-    - contradictions
+    - contradictions between Julie's plan and Selina's execution
     - unsafe actions
     - invalid conclusions
     - unnecessary or incorrect steps
+    - whether Selina's execution matched Julie's plan
+    - whether Selina's result is consistent with the expected outcome
 
-    You must decide whether Julie's reasoning is acceptable.
+    You must decide whether the reasoning and execution are acceptable.
 
     Return EXACTLY this format:
 
@@ -77,13 +92,15 @@ class Gwen:
     - Do not perform external actions.
     - Do not rewrite the user's request.
     - Do not create an execution plan for Selina.
-    - Only review Julie's reasoning.
+    - Review both Julie's reasoning and Selina's execution result.
     """.strip()
 
     def __init__(self, backend: CriticBackend):
+        # Use the configured backend to generate the review.
         self.backend = backend
 
     def review(self, user_input: str, reasoning: str) -> GwenResult:
+        # Validate both pieces of input before sending them to the critic.
         if not isinstance(user_input, str):
             raise TypeError("[Gwen]: User input must be a string.")
 
@@ -93,6 +110,7 @@ class Gwen:
         user_input = user_input.strip()
         reasoning = reasoning.strip()
 
+        # Do not ask the backend to review missing user context.
         if not user_input:
             return GwenResult(
                 approved=False,
@@ -100,6 +118,7 @@ class Gwen:
                 critique="User input is empty.",
             )
 
+        # Do not approve or reject an absent reasoning response.
         if not reasoning:
             return GwenResult(
                 approved=False,
@@ -107,6 +126,7 @@ class Gwen:
                 critique="Julie returned empty reasoning.",
             )
 
+        # Build the isolated prompt containing only the request and reasoning to review.
         messages = [
             {
                 "role": "system",
@@ -123,13 +143,16 @@ class Gwen:
             },
         ]
 
+        # Generate Gwen's review without executing any tools or actions.
         result = self.backend.generate(messages)
 
+        # The backend contract requires a text response.
         if not isinstance(result, str):
             raise TypeError("[Gwen]: Backend must return a string.....")
 
         result = result.strip()
 
+        # Treat an empty backend response as a failed review.
         if not result:
             return GwenResult(
                 approved=False,
@@ -137,9 +160,11 @@ class Gwen:
                 critique="Gwen returned an empty review",
             )
 
+        # Extract the required decision and explanation from Gwen's response.
         approved = self._parse_approval(result)
         critique = self._parse_critique(result) or result
 
+        # Return both the parsed fields and the original reasoning for traceability.
         return GwenResult(
             approved=approved,
             reasoning=reasoning,
@@ -148,17 +173,21 @@ class Gwen:
 
     @staticmethod
     def _parse_approval(result: str) -> bool:
+        # Find the APPROVED line and accept only an explicit "true" value.
         for line in result.splitlines():
             normalized = line.strip().lower()
             if normalized.startswith("approved:"):
                 value = normalized.split(":", 1)[1].strip()
                 return value == "true"
+        # Missing or unrecognized approval markers are treated as rejection.
         return False
 
     @staticmethod
     def _parse_critique(result: str) -> str:
+        # Extract the explanation after the CRITIQUE marker.
         for line in result.splitlines():
             normalized = line.strip().lower()
             if normalized.startswith("critique:"):
                 return line.split(":", 1)[1].strip()
+        # Let the caller fall back to the complete backend response.
         return ""

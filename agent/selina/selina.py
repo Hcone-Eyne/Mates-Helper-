@@ -13,7 +13,7 @@ class ActionExecutor(Protocol):
     def execute(self, action: str, arguments: dict[str, Any]) -> Any:
         ...
 
-@dataclass
+@dataclass(frozen=True)
 class SelinaResult:
     # Store both the decision Selina made and what happened when it ran it.
     success: bool
