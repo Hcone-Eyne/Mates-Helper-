@@ -2,8 +2,12 @@
 # She does not execute tasks like Julie, nor access the filesystem or external tools.
 # She reviews reasoning for hallucinations and flawed logic.
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+from agent.julie.julie import JulieResult
+from agent.selina.selina import SelinaResult
 
 
 class CriticBackend(Protocol):
@@ -48,6 +52,9 @@ class GwenResult:
     approved: bool
     reasoning: str
     critique: str
+    issues: list[str] = field(default_factory=list)
+    safety_concerns: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
 
 
 class Gwen:
@@ -93,6 +100,50 @@ class Gwen:
     - Do not rewrite the user's request.
     - Do not create an execution plan for Selina.
     - Review both Julie's reasoning and Selina's execution result.
+    """.strip()
+
+    # Structured prompt for review_structured() — requests JSON output.
+    STRUCTURED_SYSTEM_PROMPT = """
+    You are Gwen, the critic agent inside Mates Helper.
+
+    Your job is to critically review both Julie's reasoning and Selina's execution.
+
+    You will receive:
+    - The original user request
+    - Julie's expanded task, plan, and uncertainty
+    - Selina's interpretation, action, success status, result, and error
+
+    Check for:
+    - whether Julie understood the task
+    - whether Julie made unsupported assumptions
+    - whether Julie's plan is logically sound
+    - whether Selina interpreted Julie correctly
+    - whether Selina's action matches Julie's plan
+    - whether Selina's result is consistent
+    - missing safety constraints
+    - destructive or dangerous actions
+    - contradictions
+    - incomplete execution
+    - uncertainty that should be surfaced
+
+    Return ONLY valid JSON matching this schema:
+    {
+      "approved": true or false,
+      "issues": ["list of logical or reasoning problems found"],
+      "safety_concerns": ["list of unsafe or dangerous actions detected"],
+      "recommendations": ["list of suggestions to improve the plan or execution"]
+    }
+
+    Use empty arrays when there are no items for a field.
+    Do not include markdown fences or any additional keys.
+
+    Rules:
+    - Do not execute tools.
+    - Do not access files.
+    - Do not browse the internet.
+    - Do not perform external actions.
+    - Review both Julie's reasoning and Selina's execution result.
+    - Be specific about what is wrong and why.
     """.strip()
 
     def __init__(self, backend: CriticBackend):
@@ -170,6 +221,159 @@ class Gwen:
             reasoning=reasoning,
             critique=critique,
         )
+
+    def review_structured(
+        self,
+        user_request: str,
+        julie_result: JulieResult,
+        selina_result: SelinaResult,
+    ) -> GwenResult:
+        # Validate inputs before sending them to the critic.
+        if not isinstance(user_request, str):
+            raise TypeError("[Gwen]: User request must be a string.")
+
+        if not isinstance(julie_result, JulieResult):
+            raise TypeError("[Gwen]: julie_result must be a JulieResult.")
+
+        if not isinstance(selina_result, SelinaResult):
+            raise TypeError("[Gwen]: selina_result must be a SelinaResult.")
+
+        user_request = user_request.strip()
+
+        if not user_request:
+            return GwenResult(
+                approved=False,
+                reasoning="",
+                critique="User request is empty.",
+            )
+
+        # Build a structured message containing all agent outputs for review.
+        julie_plan = ", ".join(julie_result.plan) if julie_result.plan else "none"
+        julie_uncertainty = (
+            ", ".join(julie_result.uncertainty) if julie_result.uncertainty else "none"
+        )
+
+        content = (
+            f"User request:\n{user_request}\n\n"
+            f"Julie's expanded task:\n{julie_result.expanded_task}\n\n"
+            f"Julie's plan:\n{julie_plan}\n\n"
+            f"Julie's uncertainty:\n{julie_uncertainty}\n\n"
+            f"Selina's interpretation:\n{selina_result.interpretation}\n\n"
+            f"Selina's action:\n{selina_result.action}\n\n"
+            f"Selina's success:\n{selina_result.success}\n\n"
+            f"Selina's result:\n{selina_result.result}\n\n"
+            f"Selina's error:\n{selina_result.error}"
+        )
+
+        messages = [
+            {
+                "role": "system",
+                "content": self.STRUCTURED_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": content,
+            },
+        ]
+
+        # Generate Gwen's review without executing any tools or actions.
+        raw = self.backend.generate(messages)
+
+        if not isinstance(raw, str):
+            raise TypeError("[Gwen]: Backend must return a string.")
+
+        raw = raw.strip()
+
+        if not raw:
+            return GwenResult(
+                approved=False,
+                reasoning=content,
+                critique="Gwen returned an empty review.",
+            )
+
+        # Parse the structured JSON response from the backend.
+        parsed = self._parse_structured_response(raw)
+
+        return GwenResult(
+            approved=parsed["approved"],
+            reasoning=content,
+            critique=self._build_critique_text(parsed),
+            issues=parsed["issues"],
+            safety_concerns=parsed["safety_concerns"],
+            recommendations=parsed["recommendations"],
+        )
+
+    @staticmethod
+    def _parse_structured_response(raw: str) -> dict:
+        """Parse Gwen's JSON response, handling markdown fences and fallbacks."""
+        content = raw.strip()
+
+        # Strip markdown code fences if present.
+        if content.startswith("```") and content.endswith("```"):
+            lines = content.splitlines()
+            content = "\n".join(lines[1:-1]).strip()
+            if content.lower().startswith("json\n"):
+                content = content[5:].lstrip()
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            # Fallback: try to extract fields from plain text response.
+            approved = False
+            issues: list[str] = []
+            safety: list[str] = []
+            recs: list[str] = []
+
+            for line in raw.splitlines():
+                lower = line.strip().lower()
+                if lower.startswith("approved:"):
+                    value = lower.split(":", 1)[1].strip()
+                    approved = value == "true"
+                elif lower.startswith("critique:"):
+                    text = line.split(":", 1)[1].strip()
+                    if text:
+                        issues.append(text)
+
+            if not issues:
+                issues = [raw] if raw else ["Gwen returned an unparseable response."]
+
+            return {
+                "approved": approved,
+                "issues": issues,
+                "safety_concerns": safety,
+                "recommendations": recs,
+            }
+
+        if not isinstance(payload, dict):
+            payload = {}
+
+        approved = payload.get("approved", False)
+        if not isinstance(approved, bool):
+            approved = str(approved).strip().lower() == "true"
+
+        def _str_list(val: Any) -> list[str]:
+            if isinstance(val, list):
+                return [str(item) for item in val if item]
+            return []
+
+        return {
+            "approved": approved,
+            "issues": _str_list(payload.get("issues")),
+            "safety_concerns": _str_list(payload.get("safety_concerns")),
+            "recommendations": _str_list(payload.get("recommendations")),
+        }
+
+    @staticmethod
+    def _build_critique_text(parsed: dict) -> str:
+        """Build a human-readable critique from the parsed structured fields."""
+        parts: list[str] = []
+        for issue in parsed.get("issues", []):
+            parts.append(f"Issue: {issue}")
+        for concern in parsed.get("safety_concerns", []):
+            parts.append(f"Safety: {concern}")
+        for rec in parsed.get("recommendations", []):
+            parts.append(f"Recommendation: {rec}")
+        return "; ".join(parts) if parts else "No detailed critique provided."
 
     @staticmethod
     def _parse_approval(result: str) -> bool:

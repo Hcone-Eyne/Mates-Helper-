@@ -338,3 +338,187 @@ def test_reasoning_stored_in_result():
     gwen = Gwen(backend)
     result = gwen.review("user input", "the reasoning text")
     assert result.reasoning == "the reasoning text"
+
+
+# === J. review_structured with fake backends ===
+
+def test_review_structured_returns_gwen_result():
+    json_response = '{"approved": true, "issues": [], "safety_concerns": [], "recommendations": []}'
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("read the config", julie, selina)
+    assert isinstance(result, GwenResult)
+
+
+def test_review_structured_approved_true():
+    json_response = '{"approved": true, "issues": [], "safety_concerns": [], "recommendations": ["Good plan"]}'
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("read the config", julie, selina)
+    assert result.approved is True
+    assert result.recommendations == ["Good plan"]
+
+
+def test_review_structured_approved_false():
+    json_response = '{"approved": false, "issues": ["Missing policy"], "safety_concerns": ["Destructive"], "recommendations": []}'
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("organize downloads", julie, selina)
+    assert result.approved is False
+    assert "Missing policy" in result.issues
+    assert "Destructive" in result.safety_concerns
+
+
+def test_review_structured_backend_receives_structured_content():
+    json_response = '{"approved": true, "issues": [], "safety_concerns": [], "recommendations": []}'
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result(
+        user_request="do something",
+        expanded_task="Read config.yaml",
+        plan=["read_file", "parse"],
+        uncertainty=["file might not exist"],
+    )
+    selina = _make_selina_result(
+        interpretation="Task: Read config.yaml. Steps: read_file",
+        action="read_file",
+        success=True,
+        result={"content": "key: value"},
+    )
+    gwen.review_structured("do something", julie, selina)
+    content = backend.messages[1]["content"]
+
+    # Verify all structured data is present in the message.
+    assert "do something" in content
+    assert "Read config.yaml" in content
+    assert "read_file, parse" in content
+    assert "file might not exist" in content
+    assert "Selina's action:" in content
+    assert "read_file" in content
+    assert "Selina's success:" in content
+    assert "True" in content
+
+
+def test_review_structured_empty_user_request():
+    backend = RecordingBackend("should not be called")
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("", julie, selina)
+    assert result.approved is False
+    assert "empty" in result.critique.lower()
+
+
+def test_review_structured_invalid_julie_result_type():
+    backend = RecordingBackend("should not be called")
+    gwen = Gwen(backend)
+    selina = _make_selina_result()
+    with pytest.raises(TypeError, match="JulieResult"):
+        gwen.review_structured("input", "not a julie result", selina)
+
+
+def test_review_structured_invalid_selina_result_type():
+    backend = RecordingBackend("should not be called")
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    with pytest.raises(TypeError, match="SelinaResult"):
+        gwen.review_structured("input", julie, "not a selina result")
+
+
+def test_review_structured_invalid_user_request_type():
+    backend = RecordingBackend("should not be called")
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    with pytest.raises(TypeError, match="string"):
+        gwen.review_structured(123, julie, selina)
+
+
+def test_review_structured_empty_backend_response():
+    backend = RecordingBackend("")
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("do something", julie, selina)
+    assert result.approved is False
+    assert "empty" in result.critique.lower()
+
+
+def test_review_structured_json_with_markdown_fences():
+    json_response = '```json\n{"approved": true, "issues": [], "safety_concerns": [], "recommendations": ["OK"]}\n```'
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("do something", julie, selina)
+    assert result.approved is True
+    assert result.recommendations == ["OK"]
+
+
+def test_review_structured_fallback_on_invalid_json():
+    backend = RecordingBackend("APPROVED: false\nCRITIQUE: Not JSON but still useful.")
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("do something", julie, selina)
+    assert result.approved is False
+    assert len(result.issues) > 0
+
+
+def test_review_structured_preserves_all_fields():
+    json_response = (
+        '{"approved": false, '
+        '"issues": ["Plan too vague"], '
+        '"safety_concerns": ["May delete files"], '
+        '"recommendations": ["Inspect first", "Confirm with user"]}'
+    )
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result()
+    selina = _make_selina_result()
+    result = gwen.review_structured("clean up", julie, selina)
+    assert result.approved is False
+    assert result.issues == ["Plan too vague"]
+    assert result.safety_concerns == ["May delete files"]
+    assert result.recommendations == ["Inspect first", "Confirm with user"]
+
+
+def test_review_structured_stores_full_content_in_reasoning():
+    json_response = '{"approved": true, "issues": [], "safety_concerns": [], "recommendations": []}'
+    backend = RecordingBackend(json_response)
+    gwen = Gwen(backend)
+    julie = _make_julie_result(user_request="my request", expanded_task="my task")
+    selina = _make_selina_result(action="my_action")
+    result = gwen.review_structured("my request", julie, selina)
+    assert "my request" in result.reasoning
+    assert "my task" in result.reasoning
+    assert "my_action" in result.reasoning
+
+
+def test_gwenresult_has_new_fields():
+    """GwenResult now has issues, safety_concerns, and recommendations."""
+    result = GwenResult(
+        approved=False,
+        reasoning="r",
+        critique="c",
+        issues=["i1"],
+        safety_concerns=["s1"],
+        recommendations=["r1"],
+    )
+    assert result.issues == ["i1"]
+    assert result.safety_concerns == ["s1"]
+    assert result.recommendations == ["r1"]
+
+
+def test_gwenresult_new_fields_default_empty():
+    """New fields default to empty lists when not provided."""
+    result = GwenResult(approved=True, reasoning="r", critique="c")
+    assert result.issues == []
+    assert result.safety_concerns == []
+    assert result.recommendations == []
