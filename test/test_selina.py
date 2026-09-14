@@ -35,7 +35,7 @@ def _make_julie_result(**overrides) -> JulieResult:
         "user_request": "read the config file",
         "context": None,
         "expanded_task": "Read and return the contents of config.yaml",
-        "plan": ["read_file", "parse_yaml"],
+        "plan": ["list all files", "organise by type"],
         "uncertainty": ["file might not exist"],
         "raw_response": "{}",
     }
@@ -55,7 +55,7 @@ def test_execute_passes_julie_result_and_returns_selina_result():
     assert isinstance(result, SelinaResult)
     assert result.success is True
     assert result.expanded_task == "Read and return the contents of config.yaml"
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
     assert result.result == {"content": "key: value"}
     assert result.error is None
 
@@ -67,7 +67,7 @@ def test_execute_builds_arguments_from_julie_result():
     julie_result = _make_julie_result(
         user_request="list my files",
         expanded_task="List all files in the home directory",
-        plan=["list_directory"],
+        plan=["list all files"],
         uncertainty=[],
     )
     selina.execute(julie_result)
@@ -76,7 +76,7 @@ def test_execute_builds_arguments_from_julie_result():
     call = executor.calls[0]
     assert call["action"] == "list_directory"
     assert call["arguments"]["expanded_task"] == "List all files in the home directory"
-    assert call["arguments"]["plan"] == ["list_directory"]
+    assert call["arguments"]["plan"] == ["list all files"]
     assert call["arguments"]["uncertainty"] == []
     assert call["arguments"]["user_request"] == "list my files"
 
@@ -86,11 +86,11 @@ def test_execute_determines_action_from_first_step():
     selina = Selina(executor)
 
     julie_result = _make_julie_result(
-        plan=["create_folder", "write_file", "verify"]
+        plan=["sort files by type", "organise into folders"]
     )
     result = selina.execute(julie_result)
 
-    assert result.action == "create_folder"
+    assert result.action == "organise_folder"
 
 
 def test_execute_interpretation_contains_task_and_steps():
@@ -99,13 +99,13 @@ def test_execute_interpretation_contains_task_and_steps():
 
     julie_result = _make_julie_result(
         expanded_task="Deploy the app",
-        plan=["build", "push", "restart"],
+        plan=["list all files", "sort by type"],
     )
     result = selina.execute(julie_result)
 
     assert "Deploy the app" in result.interpretation
-    assert "build" in result.interpretation
-    assert "push" in result.interpretation
+    assert "list all files" in result.interpretation
+    assert "sort by type" in result.interpretation
 
 
 # --- failure cases ---
@@ -144,7 +144,9 @@ def test_execute_returns_error_when_executor_raises():
     executor = RaisingExecutor()
     selina = Selina(executor)
 
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(
+        plan=["list all files"]
+    )
     result = selina.execute(julie_result)
 
     assert result.success is False

@@ -2,11 +2,36 @@
 # aka have the most powerfull part in this.....
 
 # importing the nessary modules
+import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from agent.julie.julie import JulieResult
 from agent.annie.annie import AnnieResult
+
+
+# Explicit mapping of supported actions to their trigger keywords.
+# Each keyword is matched as a whole word inside a normalized requirement.
+# To add a new action, add an entry here AND implement it in the executor.
+SUPPORTED_ACTIONS: dict[str, list[str]] = {
+    "organise_folder": ["organise", "organize", "sort", "categorize"],
+    "list_directory":  ["list", "show", "display"],
+}
+
+
+def _resolve_action(requirements: list[str]) -> str:
+    """Scan all requirements and return the first matching supported action.
+
+    Matching uses whole-word regex against each keyword.  Returns the
+    first matched action name, or "" if no action could be resolved.
+    """
+    for req in requirements:
+        normalized = req.strip().lower()
+        for action_name, keywords in SUPPORTED_ACTIONS.items():
+            for kw in keywords:
+                if re.search(rf"\b{re.escape(kw)}\b", normalized):
+                    return action_name
+    return ""
 
 # this class is used to perform the task selina needs
 class ActionExecutor(Protocol):
@@ -182,18 +207,15 @@ class Selina():
     def _determine_action(julie_result: JulieResult) -> str:
         """Determine the action from Julie's plan.
 
-        Uses the first step as the action name.
-        This is a simple heuristic — can be extended later.
+        Scans all plan steps against the explicit SUPPORTED_ACTIONS
+        mapping using whole-word regex matching.
         """
-        # Julie's first step is treated as the command to run.
         steps = julie_result.plan
 
-        # No steps means there is no command to execute.
         if not steps:
             return ""
 
-        # Normalize the command for executor lookup, such as "Run Tests" -> "run_tests".
-        return steps[0].strip().lower().replace(" ", "_")
+        return _resolve_action(steps)
 
     @staticmethod
     def _build_arguments(julie_result: JulieResult) -> dict[str, Any]:
@@ -208,16 +230,12 @@ class Selina():
 
     @staticmethod
     def _action_from_requirements(annie_result: AnnieResult) -> str:
-        """Derive an action name from Annie's first requirement.
+        """Resolve an action name from Annie's requirements.
 
-        Uses the same normalization as Julie's plan steps.
+        Scans all requirements against the explicit SUPPORTED_ACTIONS
+        mapping using whole-word regex matching.
         """
-        requirements = annie_result.requirements
-
-        if not requirements:
-            return ""
-
-        return requirements[0].strip().lower().replace(" ", "_")
+        return _resolve_action(annie_result.requirements)
 
     @staticmethod
     def _build_arguments_from_annie(annie_result: AnnieResult) -> dict[str, Any]:

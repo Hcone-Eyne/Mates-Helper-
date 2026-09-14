@@ -216,3 +216,136 @@ def test_symlink_outside_target_is_rejected():
     finally:
         shutil.rmtree(tmp)
         shutil.rmtree(outside_dir)
+
+
+# ------------------------------------------------------------------
+# list_directory tests
+# ------------------------------------------------------------------
+
+def test_list_directory_non_recursive():
+    """Non-recursive listing returns immediate children only."""
+    tmp = tempfile.mkdtemp(prefix="fox_list_")
+    try:
+        (Path(tmp) / "a.txt").write_text("a")
+        (Path(tmp) / "b.txt").write_text("b")
+        sub = Path(tmp) / "subdir"
+        sub.mkdir()
+        (sub / "nested.txt").write_text("n")
+
+        executor = FileActionExecutor(Path(tmp))
+        result = executor.execute("list_directory", {"recursive": False})
+
+        entries = result["entries"]
+        assert "a.txt" in entries
+        assert "b.txt" in entries
+        assert "subdir" in entries
+        # nested file should NOT appear in non-recursive listing
+        assert "subdir/nested.txt" not in entries
+        assert result["count"] == 3
+        assert result["recursive"] is False
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_list_directory_recursive():
+    """Recursive listing returns all descendants."""
+    tmp = tempfile.mkdtemp(prefix="fox_listrec_")
+    try:
+        (Path(tmp) / "a.txt").write_text("a")
+        sub = Path(tmp) / "subdir"
+        sub.mkdir()
+        (sub / "nested.txt").write_text("n")
+        deep = sub / "deep"
+        deep.mkdir()
+        (deep / "deep.txt").write_text("d")
+
+        executor = FileActionExecutor(Path(tmp))
+        result = executor.execute("list_directory", {"recursive": True})
+
+        entries = result["entries"]
+        assert "a.txt" in entries
+        assert "subdir" in entries
+        assert str(Path("subdir") / "nested.txt") in entries
+        assert str(Path("subdir") / "deep") in entries
+        assert str(Path("subdir") / "deep" / "deep.txt") in entries
+        assert result["count"] == 5
+        assert result["recursive"] is True
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_list_directory_empty():
+    """Empty directory should return empty entries list."""
+    tmp = tempfile.mkdtemp(prefix="fox_listempty_")
+    try:
+        executor = FileActionExecutor(Path(tmp))
+        result = executor.execute("list_directory", {})
+
+        assert result["entries"] == []
+        assert result["count"] == 0
+        assert "empty" in result["summary"].lower()
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_list_directory_read_only():
+    """list_directory must not modify anything in the target."""
+    tmp = tempfile.mkdtemp(prefix="fox_listro_")
+    try:
+        (Path(tmp) / "file.txt").write_text("original")
+        mtime_before = (Path(tmp) / "file.txt").stat().st_mtime
+
+        executor = FileActionExecutor(Path(tmp))
+        executor.execute("list_directory", {"recursive": True})
+
+        # File should be unchanged.
+        assert (Path(tmp) / "file.txt").read_text() == "original"
+        assert (Path(tmp) / "file.txt").stat().st_mtime == mtime_before
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_list_directory_path_safety():
+    """list_directory must enforce _assert_inside for all entries."""
+    tmp = tempfile.mkdtemp(prefix="fox_listsafe_")
+    try:
+        target = Path(tmp) / "workspace"
+        target.mkdir()
+        (target / "ok.txt").write_text("ok")
+
+        executor = FileActionExecutor(target)
+
+        # A symlink pointing outside should be rejected.
+        outside_dir = tempfile.mkdtemp(prefix="fox_out_")
+        outside_file = Path(outside_dir) / "secret.txt"
+        outside_file.write_text("secret")
+
+        link = target / "sneak.txt"
+        link.symlink_to(outside_file)
+
+        try:
+            executor.execute("list_directory", {})
+            assert False, "Should have raised PermissionError"
+        except PermissionError:
+            pass  # expected
+    finally:
+        shutil.rmtree(tmp)
+        shutil.rmtree(outside_dir)
+
+
+def test_list_directory_default_recursive_false():
+    """Omitting 'recursive' argument should default to non-recursive."""
+    tmp = tempfile.mkdtemp(prefix="fox_listdef_")
+    try:
+        sub = Path(tmp) / "child"
+        sub.mkdir()
+        (sub / "file.txt").write_text("x")
+
+        executor = FileActionExecutor(Path(tmp))
+        result = executor.execute("list_directory", {})
+
+        # Only "child" should appear, not "child/file.txt"
+        assert "child" in result["entries"]
+        assert str(Path("child") / "file.txt") not in result["entries"]
+    finally:
+        shutil.rmtree(tmp)

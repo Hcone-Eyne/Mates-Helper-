@@ -50,9 +50,12 @@ class FileActionExecutor:
         if action == "organise_folder":
             return self._organise_folder(arguments)
 
+        if action == "list_directory":
+            return self._list_directory(arguments)
+
         raise RuntimeError(
             f"[FileActionExecutor]: Unknown action '{action}'. "
-            f"Supported: organise_folder"
+            f"Supported: organise_folder, list_directory"
         )
 
     # ------------------------------------------------------------------
@@ -107,4 +110,51 @@ class FileActionExecutor:
             "target": str(self._target),
             "moved": {cat: files for cat, files in moved.items() if files},
             "summary": "; ".join(summary_parts) if summary_parts else "No files to organise.",
+        }
+
+    # ------------------------------------------------------------------
+    # list_directory
+    # ------------------------------------------------------------------
+
+    def _list_directory(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """List entries in the target directory.
+
+        Accepts a ``recursive`` boolean argument (default False).
+        When False, lists only immediate children.
+        When True, lists all descendants recursively.
+
+        Returns a dict with ``entries`` (list of relative path strings),
+        ``count`` (int), and ``summary`` (human-readable string).
+        Strictly read-only — nothing is modified.
+        """
+        recursive: bool = arguments.get("recursive", False)
+
+        entries: list[str] = []
+
+        if recursive:
+            for path in sorted(self._target.rglob("*")):
+                self._assert_inside(path)
+                rel = path.relative_to(self._target)
+                entries.append(str(rel))
+        else:
+            for path in sorted(self._target.iterdir()):
+                self._assert_inside(path)
+                rel = path.relative_to(self._target)
+                entries.append(str(rel))
+
+        count = len(entries)
+
+        if count == 0:
+            summary = "Directory is empty."
+        elif recursive:
+            summary = f"{count} entries (recursive)."
+        else:
+            summary = f"{count} entries."
+
+        return {
+            "target": str(self._target),
+            "recursive": recursive,
+            "entries": entries,
+            "count": count,
+            "summary": summary,
         }

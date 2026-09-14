@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 
 from agent.annie.annie import AnnieResult
-from agent.selina.selina import Selina, SelinaResult
+from agent.selina.selina import Selina, SelinaResult, _resolve_action, SUPPORTED_ACTIONS
 
 
 class RecordingExecutor:
@@ -100,12 +100,12 @@ def test_execute_from_annie_action_from_first_requirement():
     executor = RecordingExecutor()
     selina = Selina(executor)
     annie_result = _make_annie_result(
-        requirements=["Read the config file", "Parse the YAML"]
+        requirements=["List all folder names", "Categorize them"]
     )
 
     result = selina.execute_from_annie(annie_result)
 
-    assert result.action == "read_the_config_file"
+    assert result.action == "list_directory"
 
 
 def test_execute_from_annie_explicit_action_overrides():
@@ -126,7 +126,7 @@ def test_execute_from_annie_arguments_contain_all_annie_fields():
     annie_result = _make_annie_result(
         user_request="my request",
         interpretation="my interpretation",
-        requirements=["req1", "req2"],
+        requirements=["List all files", "Sort by type"],
         constraints=["con1"],
         technical_handoff="my handoff",
         clarification_needed=["clar1"],
@@ -137,7 +137,7 @@ def test_execute_from_annie_arguments_contain_all_annie_fields():
     args = executor.calls[0]["arguments"]
     assert args["user_request"] == "my request"
     assert args["interpretation"] == "my interpretation"
-    assert args["requirements"] == ["req1", "req2"]
+    assert args["requirements"] == ["List all files", "Sort by type"]
     assert args["constraints"] == ["con1"]
     assert args["technical_handoff"] == "my handoff"
     assert args["clarification_needed"] == ["clar1"]
@@ -247,12 +247,12 @@ def test_execute_from_annie_none_action_derives_from_requirements():
     executor = RecordingExecutor()
     selina = Selina(executor)
     annie_result = _make_annie_result(
-        requirements=["Create new folder", "Move files"]
+        requirements=["Sort files by type", "Create new folder"]
     )
 
     result = selina.execute_from_annie(annie_result, action=None)
 
-    assert result.action == "create_new_folder"
+    assert result.action == "organise_folder"
 
 
 # === F. Executor failure ===
@@ -281,36 +281,90 @@ def test_execute_from_annie_failure_preserves_interpretation():
     assert result.interpretation == "Custom interpretation text"
 
 
-# === G. Action normalization ===
+# === G. Action resolution (keyword matching) ===
 
-def test_action_normalized_lowercase():
+def test_action_resolves_list_keyword():
+    """Requirements containing 'list' should resolve to list_directory."""
     executor = RecordingExecutor()
     selina = Selina(executor)
-    annie_result = _make_annie_result(requirements=["Read File"])
+    annie_result = _make_annie_result(requirements=["List all files"])
 
     result = selina.execute_from_annie(annie_result)
 
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
 
 
-def test_action_normalized_spaces_to_underscores():
+def test_action_resolves_show_keyword():
+    """Requirements containing 'show' should resolve to list_directory."""
     executor = RecordingExecutor()
     selina = Selina(executor)
-    annie_result = _make_annie_result(requirements=["Create New Folder"])
+    annie_result = _make_annie_result(requirements=["Show directory contents"])
 
     result = selina.execute_from_annie(annie_result)
 
-    assert result.action == "create_new_folder"
+    assert result.action == "list_directory"
 
 
-def test_action_stripped_whitespace():
+def test_action_resolves_organise_keyword():
+    """Requirements containing 'organise' should resolve to organise_folder."""
     executor = RecordingExecutor()
     selina = Selina(executor)
-    annie_result = _make_annie_result(requirements=["  read_file  "])
+    annie_result = _make_annie_result(requirements=["Organise files by type"])
 
     result = selina.execute_from_annie(annie_result)
 
-    assert result.action == "read_file"
+    assert result.action == "organise_folder"
+
+
+def test_action_resolves_sort_keyword():
+    """Requirements containing 'sort' should resolve to organise_folder."""
+    executor = RecordingExecutor()
+    selina = Selina(executor)
+    annie_result = _make_annie_result(requirements=["Sort files into categories"])
+
+    result = selina.execute_from_annie(annie_result)
+
+    assert result.action == "organise_folder"
+
+
+def test_action_unmatched_returns_empty():
+    """Requirements with no supported keyword should return empty action."""
+    executor = RecordingExecutor()
+    selina = Selina(executor)
+    annie_result = _make_annie_result(
+        requirements=["Delete everything", "Format the disk"]
+    )
+
+    result = selina.execute_from_annie(annie_result)
+
+    assert result.success is False
+    assert "action" in result.error.lower()
+
+
+def test_action_whole_word_matching():
+    """Keyword must match as a whole word, not a substring."""
+    # "display" should match, but "indisposed" should not trigger "display"
+    executor = RecordingExecutor()
+    selina = Selina(executor)
+    annie_result = _make_annie_result(
+        requirements=["I am indisposed today"]
+    )
+
+    result = selina.execute_from_annie(annie_result)
+
+    # "display" is not a substring of "indisposed", so no match
+    assert result.success is False
+
+
+def test_action_case_insensitive():
+    """Matching should be case-insensitive."""
+    executor = RecordingExecutor()
+    selina = Selina(executor)
+    annie_result = _make_annie_result(requirements=["LIST all folders"])
+
+    result = selina.execute_from_annie(annie_result)
+
+    assert result.action == "list_directory"
 
 
 # === H. Existing execute() still works ===
@@ -325,7 +379,7 @@ def test_original_execute_still_accepts_julie_result():
         user_request="test",
         context=None,
         expanded_task="task",
-        plan=["step_one"],
+        plan=["list all files"],
         uncertainty=[],
         raw_response="{}",
     )
@@ -334,4 +388,50 @@ def test_original_execute_still_accepts_julie_result():
 
     assert isinstance(result, SelinaResult)
     assert result.success is True
-    assert result.action == "step_one"
+    assert result.action == "list_directory"
+
+
+# === I. _resolve_action unit tests ===
+
+def test_resolve_action_empty_requirements():
+    """Empty requirements list should return empty string."""
+    assert _resolve_action([]) == ""
+
+
+def test_resolve_action_no_match():
+    """Requirements with no supported keyword should return empty string."""
+    assert _resolve_action(["Delete everything", "Format the disk"]) == ""
+
+
+def test_resolve_action_list_directory():
+    """Requirements with 'list' should resolve to list_directory."""
+    assert _resolve_action(["List all folder names"]) == "list_directory"
+
+
+def test_resolve_action_organise_folder():
+    """Requirements with 'sort' should resolve to organise_folder."""
+    assert _resolve_action(["Sort files by type"]) == "organise_folder"
+
+
+def test_resolve_action_first_match_wins():
+    """The first matching requirement determines the action."""
+    assert _resolve_action(
+        ["Sort files", "List all folders"]
+    ) == "organise_folder"
+
+
+def test_resolve_action_scans_all_requirements():
+    """Later requirements are checked if earlier ones don't match."""
+    assert _resolve_action(
+        ["Delete everything", "Show directory contents"]
+    ) == "list_directory"
+
+
+def test_resolve_action_supported_actions_complete():
+    """All actions in SUPPORTED_ACTIONS should be resolvable."""
+    for action_name, keywords in SUPPORTED_ACTIONS.items():
+        for kw in keywords:
+            result = _resolve_action([f"Please {kw} the files"])
+            assert result == action_name, (
+                f"Keyword '{kw}' should resolve to '{action_name}', got '{result}'"
+            )

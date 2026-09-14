@@ -55,7 +55,7 @@ def _make_julie_result(**overrides) -> JulieResult:
         "user_request": "read the config file",
         "context": None,
         "expanded_task": "Read and return the contents of config.yaml",
-        "plan": ["read_file", "parse_yaml"],
+        "plan": ["list all files", "organise by type"],
         "uncertainty": ["file might not exist"],
         "raw_response": "{}",
     }
@@ -89,17 +89,17 @@ def test_interpretation_is_generated():
 def test_action_is_generated():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["read_file", "parse_yaml"])
+    julie_result = _make_julie_result(plan=["list all files", "organise by type"])
     result = selina.execute(julie_result)
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
 
 
 def test_executor_receives_correct_action():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["write_file", "verify"])
+    julie_result = _make_julie_result(plan=["show directory contents", "verify"])
     selina.execute(julie_result)
-    assert executor.calls[0]["action"] == "write_file"
+    assert executor.calls[0]["action"] == "list_directory"
 
 
 def test_executor_receives_correct_arguments():
@@ -108,14 +108,14 @@ def test_executor_receives_correct_arguments():
     julie_result = _make_julie_result(
         user_request="test request",
         expanded_task="test task",
-        plan=["step_one"],
+        plan=["list all files"],
         uncertainty=["uncertain thing"],
     )
     selina.execute(julie_result)
     args = executor.calls[0]["arguments"]
     assert args["user_request"] == "test request"
     assert args["expanded_task"] == "test task"
-    assert args["plan"] == ["step_one"]
+    assert args["plan"] == ["list all files"]
     assert args["uncertainty"] == ["uncertain thing"]
 
 
@@ -203,17 +203,17 @@ def test_empty_plan_returns_failure():
 def test_action_from_first_step():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["first_step", "second_step", "third_step"])
+    julie_result = _make_julie_result(plan=["show files", "second_step", "third_step"])
     result = selina.execute(julie_result)
-    assert result.action == "first_step"
+    assert result.action == "list_directory"
 
 
 def test_all_plan_steps_in_arguments():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["step_a", "step_b", "step_c"])
+    julie_result = _make_julie_result(plan=["list all files", "sort by type", "organise into folders"])
     selina.execute(julie_result)
-    assert executor.calls[0]["arguments"]["plan"] == ["step_a", "step_b", "step_c"]
+    assert executor.calls[0]["arguments"]["plan"] == ["list all files", "sort by type", "organise into folders"]
 
 
 # === F. Uncertainty propagation ===
@@ -221,7 +221,10 @@ def test_all_plan_steps_in_arguments():
 def test_uncertainty_passed_to_executor():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(uncertainty=["unclear", "ambiguous"])
+    julie_result = _make_julie_result(
+        plan=["list all files"],
+        uncertainty=["unclear", "ambiguous"]
+    )
     selina.execute(julie_result)
     assert executor.calls[0]["arguments"]["uncertainty"] == ["unclear", "ambiguous"]
 
@@ -229,7 +232,7 @@ def test_uncertainty_passed_to_executor():
 def test_empty_uncertainty_passed():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(uncertainty=[])
+    julie_result = _make_julie_result(plan=["list all files"], uncertainty=[])
     selina.execute(julie_result)
     assert executor.calls[0]["arguments"]["uncertainty"] == []
 
@@ -244,7 +247,7 @@ def test_success_result_has_all_fields():
     assert result.success is True
     assert result.expanded_task == "Read and return the contents of config.yaml"
     assert result.interpretation != ""
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
     assert result.result == "completed"
     assert result.error is None
 
@@ -254,11 +257,11 @@ def test_success_result_has_all_fields():
 def test_executor_exception_returns_failure():
     executor = RaisingExecutor(RuntimeError("boom"))
     selina = Selina(executor)
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(plan=["list all files"])
     result = selina.execute(julie_result)
     assert result.success is False
     assert "boom" in result.error
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
 
 
 def test_executor_exception_preserves_interpretation():
@@ -266,7 +269,7 @@ def test_executor_exception_preserves_interpretation():
     selina = Selina(executor)
     julie_result = _make_julie_result(
         expanded_task="Do something",
-        plan=["step_one"],
+        plan=["list all files"],
     )
     result = selina.execute(julie_result)
     assert "Do something" in result.interpretation
@@ -275,7 +278,7 @@ def test_executor_exception_preserves_interpretation():
 def test_type_error_from_executor_returns_failure():
     executor = RaisingExecutor(TypeError("bad type"))
     selina = Selina(executor)
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(plan=["list all files"])
     result = selina.execute(julie_result)
     assert result.success is False
     assert "bad type" in result.error
@@ -286,7 +289,10 @@ def test_type_error_from_executor_returns_failure():
 def test_user_request_not_lost():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(user_request="specific request text")
+    julie_result = _make_julie_result(
+        user_request="specific request text",
+        plan=["list all files"],
+    )
     selina.execute(julie_result)
     assert executor.calls[0]["arguments"]["user_request"] == "specific request text"
 
@@ -294,7 +300,10 @@ def test_user_request_not_lost():
 def test_expanded_task_not_lost():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(expanded_task="specific task text")
+    julie_result = _make_julie_result(
+        expanded_task="specific task text",
+        plan=["list all files"],
+    )
     result = selina.execute(julie_result)
     assert result.expanded_task == "specific task text"
     assert executor.calls[0]["arguments"]["expanded_task"] == "specific task text"
@@ -303,9 +312,9 @@ def test_expanded_task_not_lost():
 def test_plan_not_lost():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["a", "b", "c"])
+    julie_result = _make_julie_result(plan=["list all files", "sort by type", "organise"])
     selina.execute(julie_result)
-    assert executor.calls[0]["arguments"]["plan"] == ["a", "b", "c"]
+    assert executor.calls[0]["arguments"]["plan"] == ["list all files", "sort by type", "organise"]
 
 
 def test_interpretation_not_lost():
@@ -313,45 +322,45 @@ def test_interpretation_not_lost():
     selina = Selina(executor)
     julie_result = _make_julie_result(
         expanded_task="Test task",
-        plan=["step_one"],
+        plan=["list all files"],
     )
     result = selina.execute(julie_result)
     assert "Test task" in result.interpretation
-    assert "step_one" in result.interpretation
+    assert "list all files" in result.interpretation
 
 
 def test_error_preserved_on_executor_failure():
     executor = RaisingExecutor(RuntimeError("specific error message"))
     selina = Selina(executor)
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(plan=["list all files"])
     result = selina.execute(julie_result)
     assert result.error == "specific error message"
 
 
-# === Action normalization ===
+# === Action resolution ===
 
-def test_action_normalized_lowercase():
+def test_action_resolves_list_keyword():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["Read File"])
+    julie_result = _make_julie_result(plan=["List all Files"])
     result = selina.execute(julie_result)
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
 
 
-def test_action_normalized_spaces_to_underscores():
+def test_action_resolves_sort_keyword():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["Create New Folder"])
+    julie_result = _make_julie_result(plan=["Sort Files by Type"])
     result = selina.execute(julie_result)
-    assert result.action == "create_new_folder"
+    assert result.action == "organise_folder"
 
 
-def test_action_stripped_whitespace():
+def test_action_resolves_display_keyword():
     executor = RecordingExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result(plan=["  read_file  "])
+    julie_result = _make_julie_result(plan=["  display contents  "])
     result = selina.execute(julie_result)
-    assert result.action == "read_file"
+    assert result.action == "list_directory"
 
 
 # === Weird executor results ===
@@ -359,7 +368,7 @@ def test_action_stripped_whitespace():
 def test_executor_returns_none():
     executor = SlowExecutor()
     selina = Selina(executor)
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(plan=["list all files"])
     result = selina.execute(julie_result)
     assert result.success is True
     assert result.result is None
@@ -368,7 +377,7 @@ def test_executor_returns_none():
 def test_executor_returns_empty_string():
     executor = RecordingExecutor(result="")
     selina = Selina(executor)
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(plan=["list all files"])
     result = selina.execute(julie_result)
     assert result.success is True
     assert result.result == ""
@@ -378,7 +387,7 @@ def test_executor_returns_large_dict():
     big_dict = {f"key_{i}": f"value_{i}" for i in range(100)}
     executor = RecordingExecutor(result=big_dict)
     selina = Selina(executor)
-    julie_result = _make_julie_result()
+    julie_result = _make_julie_result(plan=["list all files"])
     result = selina.execute(julie_result)
     assert result.success is True
     assert result.result == big_dict

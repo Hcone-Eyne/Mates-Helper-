@@ -70,7 +70,7 @@ def test_full_pipeline_success():
     """Julie -> Selina -> Gwen with successful execution."""
     # 1. Julie
     julie_backend = RecordingBackend(
-        '{"expanded_task":"Read config.yaml","plan":["read_file","parse"],"uncertainty":[]}'
+        '{"expanded_task":"Read config.yaml","plan":["list all files","organise by type"],"uncertainty":[]}'
     )
     julie = Julie(julie_backend)
     julie_result = julie.reason("read the config")
@@ -93,11 +93,11 @@ def test_full_pipeline_success():
 
     # Julie produced correct output
     assert julie_result.expanded_task == "Read config.yaml"
-    assert julie_result.plan == ["read_file", "parse"]
+    assert julie_result.plan == ["list all files", "organise by type"]
 
     # Selina executed correctly
     assert selina_result.success is True
-    assert selina_result.action == "read_file"
+    assert selina_result.action == "list_directory"
     assert selina_result.result == {"key": "value"}
 
     # Gwen approved
@@ -113,7 +113,7 @@ def test_full_pipeline_failure_at_selina():
     """Julie -> Selina (fails) -> Gwen rejects."""
     # 1. Julie
     julie_backend = RecordingBackend(
-        '{"expanded_task":"Deploy app","plan":["deploy"],"uncertainty":["might fail"]}'
+        '{"expanded_task":"Deploy app","plan":["list all files"],"uncertainty":["might fail"]}'
     )
     julie = Julie(julie_backend)
     julie_result = julie.reason("deploy the app")
@@ -143,7 +143,7 @@ def test_full_pipeline_bad_reasoning():
     """Julie (bad plan) -> Selina -> Gwen rejects the reasoning."""
     # 1. Julie with questionable plan
     julie_backend = RecordingBackend(
-        '{"expanded_task":"Delete everything","plan":["rm -rf /"],"uncertainty":["destructive"]}'
+        '{"expanded_task":"Delete everything","plan":["list all files"],"uncertainty":["destructive"]}'
     )
     julie = Julie(julie_backend)
     julie_result = julie.reason("clean up files")
@@ -169,7 +169,7 @@ def test_data_not_lost_between_agents():
     """Verify all data fields survive the pipeline."""
     # 1. Julie
     julie_backend = RecordingBackend(
-        '{"expanded_task":"Specific task text","plan":["step_a","step_b"],"uncertainty":["unclear part"]}'
+        '{"expanded_task":"Specific task text","plan":["list all files","sort by type"],"uncertainty":["unclear part"]}'
     )
     julie = Julie(julie_backend)
     julie_result = julie.reason("specific user request", "some context")
@@ -182,11 +182,11 @@ def test_data_not_lost_between_agents():
     # Check Selina preserved Julie's data
     assert selina_result.expanded_task == "Specific task text"
     assert executor.calls[0]["arguments"]["user_request"] == "specific user request"
-    assert executor.calls[0]["arguments"]["plan"] == ["step_a", "step_b"]
+    assert executor.calls[0]["arguments"]["plan"] == ["list all files", "sort by type"]
     assert executor.calls[0]["arguments"]["uncertainty"] == ["unclear part"]
 
     # Check Selina added its own data
-    assert selina_result.action == "step_a"
+    assert selina_result.action == "list_directory"
     assert selina_result.interpretation != ""
     assert selina_result.result == "result_value"
 
@@ -198,14 +198,14 @@ def test_data_not_lost_between_agents():
 
     # Gwen received the combined reasoning
     assert "Specific task text" in gwen_backend.messages[1]["content"]
-    assert "step_a" in gwen_backend.messages[1]["content"]
+    assert "list all files" in gwen_backend.messages[1]["content"]
     assert "result_value" in gwen_backend.messages[1]["content"]
 
 
 def test_gwen_receives_both_julie_and_selina_info():
     """Verify Gwen's backend receives information from both Julie and Selina."""
     julie_backend = RecordingBackend(
-        '{"expanded_task":"Task","plan":["action"],"uncertainty":[]}'
+        '{"expanded_task":"Task","plan":["list all files"],"uncertainty":[]}'
     )
     julie = Julie(julie_backend)
     julie_result = julie.reason("do it")
@@ -223,7 +223,7 @@ def test_gwen_receives_both_julie_and_selina_info():
 
     # Julie info present
     assert "Expanded task: Task" in content
-    assert "Plan: action" in content
+    assert "Plan: list all files" in content
 
     # Selina info present
     assert "Selina action:" in content
@@ -234,7 +234,7 @@ def test_gwen_receives_both_julie_and_selina_info():
 def test_pipeline_works_with_context():
     """Full pipeline with Julie receiving context."""
     julie_backend = RecordingBackend(
-        '{"expanded_task":"Use context","plan":["step"],"uncertainty":[]}'
+        '{"expanded_task":"Use context","plan":["list all files"],"uncertainty":[]}'
     )
     julie = Julie(julie_backend)
     julie_result = julie.reason("do it", "important context")
