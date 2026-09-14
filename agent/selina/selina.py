@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from agent.julie.julie import JulieResult
+from agent.annie.annie import AnnieResult
 
 # this class is used to perform the task selina needs
 class ActionExecutor(Protocol):
@@ -97,6 +98,71 @@ class Selina():
                 error=str(exc)
             )
 
+    def execute_from_annie(
+        self,
+        annie_result: AnnieResult,
+        action: str | None = None,
+    ) -> SelinaResult:
+        # Validate the AnnieResult before processing.
+        if not isinstance(annie_result, AnnieResult):
+            raise TypeError(
+                "[Selina]: Input must be an AnnieResult."
+            )
+
+        # Use the technical handoff as the task description.
+        expanded_task = annie_result.technical_handoff
+
+        if not expanded_task or not expanded_task.strip():
+            return SelinaResult(
+                success=False,
+                expanded_task="",
+                interpretation="",
+                action="",
+                error="Annie's technical_handoff is empty."
+            )
+
+        # Use Annie's interpretation directly — no need to build from plan.
+        interpretation = annie_result.interpretation
+
+        # Determine the action: use provided action or derive from first requirement.
+        if action is None:
+            action = self._action_from_requirements(annie_result)
+
+        if not action:
+            return SelinaResult(
+                success=False,
+                expanded_task=expanded_task,
+                interpretation=interpretation,
+                action="",
+                error="Could not determine an action from Annie's requirements."
+            )
+
+        # Build arguments from Annie's structured fields.
+        arguments = self._build_arguments_from_annie(annie_result)
+
+        try:
+            result = self.executor.execute(
+                action=action,
+                arguments=arguments,
+            )
+
+            return SelinaResult(
+                success=True,
+                expanded_task=expanded_task,
+                interpretation=interpretation,
+                action=action,
+                result=result,
+            )
+
+        except Exception as exc:
+            return SelinaResult(
+                success=False,
+                expanded_task=expanded_task,
+                interpretation=interpretation,
+                action=action,
+                error=str(exc),
+            )
+
     @staticmethod
     def _interpret(julie_result: JulieResult) -> str:
         """Interpret what needs to happen based on Julie's reasoning."""
@@ -138,4 +204,29 @@ class Selina():
             "plan": julie_result.plan,
             "uncertainty": julie_result.uncertainty,
             "user_request": julie_result.user_request,
+        }
+
+    @staticmethod
+    def _action_from_requirements(annie_result: AnnieResult) -> str:
+        """Derive an action name from Annie's first requirement.
+
+        Uses the same normalization as Julie's plan steps.
+        """
+        requirements = annie_result.requirements
+
+        if not requirements:
+            return ""
+
+        return requirements[0].strip().lower().replace(" ", "_")
+
+    @staticmethod
+    def _build_arguments_from_annie(annie_result: AnnieResult) -> dict[str, Any]:
+        """Build executor arguments from Annie's result."""
+        return {
+            "user_request": annie_result.user_request,
+            "interpretation": annie_result.interpretation,
+            "requirements": annie_result.requirements,
+            "constraints": annie_result.constraints,
+            "technical_handoff": annie_result.technical_handoff,
+            "clarification_needed": annie_result.clarification_needed,
         }
