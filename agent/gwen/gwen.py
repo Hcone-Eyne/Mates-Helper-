@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from agent.julie.julie import JulieResult
+from agent.annie.annie import AnnieResult
 from agent.selina.selina import SelinaResult
 
 
@@ -227,6 +228,7 @@ class Gwen:
         user_request: str,
         julie_result: JulieResult,
         selina_result: SelinaResult,
+        annie_result: "AnnieResult | None" = None,
     ) -> GwenResult:
         # Validate inputs before sending them to the critic.
         if not isinstance(user_request, str):
@@ -237,6 +239,9 @@ class Gwen:
 
         if not isinstance(selina_result, SelinaResult):
             raise TypeError("[Gwen]: selina_result must be a SelinaResult.")
+
+        if annie_result is not None and not isinstance(annie_result, AnnieResult):
+            raise TypeError("[Gwen]: annie_result must be an AnnieResult or None.")
 
         user_request = user_request.strip()
 
@@ -258,6 +263,25 @@ class Gwen:
             f"Julie's expanded task:\n{julie_result.expanded_task}\n\n"
             f"Julie's plan:\n{julie_plan}\n\n"
             f"Julie's uncertainty:\n{julie_uncertainty}\n\n"
+        )
+
+        # Include Annie's handoff if provided.
+        if annie_result is not None:
+            annie_requirements = (
+                ", ".join(annie_result.requirements) if annie_result.requirements else "none"
+            )
+            annie_constraints = (
+                ", ".join(annie_result.constraints) if annie_result.constraints else "none"
+            )
+            content += (
+                f"Annie's interpretation:\n{annie_result.interpretation}\n\n"
+                f"Annie's requirements:\n{annie_requirements}\n\n"
+                f"Annie's constraints:\n{annie_constraints}\n\n"
+                f"Annie's technical handoff:\n{annie_result.technical_handoff}\n\n"
+                f"Annie's clarification needed:\n{', '.join(annie_result.clarification_needed) if annie_result.clarification_needed else 'none'}\n\n"
+            )
+
+        content += (
             f"Selina's interpretation:\n{selina_result.interpretation}\n\n"
             f"Selina's action:\n{selina_result.action}\n\n"
             f"Selina's success:\n{selina_result.success}\n\n"

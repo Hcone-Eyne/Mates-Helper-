@@ -284,6 +284,11 @@ def run_fox_agent():
 
         input("\nPress Enter to continue...")
 
+# this function runs the Fox Club pipeline (Julie -> Annie -> Selina -> Gwen)
+def run_fox_club():
+    from agent.fox.runtime.runtime import run_fox_club as _run
+    _run()
+
 if __name__ == "__main__":
     # reading the csv file
     # NEW - using your Path_mapper constant!
