@@ -41,7 +41,7 @@ class Runtime:
 
     Flow:
 
-        User
+        User 
           ↓
         Julie
           ↓
@@ -54,13 +54,10 @@ class Runtime:
         Final result
     """
 
-    def __init__(
-        self,
-        julie: Julie,
-        annie: Annie,
-        selina: Selina,
-        gwen: Gwen,
-    ):
+    # Adding refinement limits
+    MAX_REFINEMENTS = 3
+
+    def __init__(self,julie: Julie,annie: Annie,selina: Selina,gwen: Gwen,):
         # Store each Club member so Runtime can coordinate them.
         self.julie = julie
         self.annie = annie
@@ -126,21 +123,60 @@ class Runtime:
         # ---------------------------------------------------------
         # STEP 4: GWEN
         # ---------------------------------------------------------
-        # Gwen checks the result produced by Selina against
-        # the original reasoning, Annie's handoff, and Selina's execution.
-        gwen_result = self.gwen.review_structured(
-            user_request=user_input,
-            julie_result=julie_result,
-            selina_result=selina_result,
-            annie_result=annie_result,
-        )
+        # changed -> Gwen review is handled by controlled refinement loop below!
 
+        
         # ---------------------------------------------------------
         # STEP 5: FINAL RESULT
         # ---------------------------------------------------------
         # For the first Runtime version, we return Selina's result
         # together with Gwen's review.
-        #
+        
+        # refinment count if exceeed, refinement will be stoped by conditions.....
+        refinement_count = 0
+
+        # loop for refiment process
+        while True:
+            # Gwen review the current attempt made.....
+            gwen_result = self.gwen.review_structured(
+                user_request=user_input,
+                julie_result=julie_result,
+                selina_result=selina_result,
+                annie_result=annie_result,
+            )
+
+            # stop immediately if gwen approves the result!
+            if gwen_result.approved:
+                break
+
+            # safety concern must never trigger automatic redefinement
+            if gwen_result.safety_concerns():
+                break
+
+            # stop if maximim tries happened
+            if refinement_count >= self.MAX_REFINEMENTS:
+                break
+
+            # gwen rejected the result, so annie gets feedback and refines with the exits result
+            annie_result = self.annie.refine(
+                previous_result = annie_result,
+                selina_feedback = gwen_result.critique
+            )
+
+            # execute the refined result by seline
+            selina_result = self.selina.execute_from_annie(annie_result)
+
+            # make sure selina returns the expected result..
+            if not isinstance(selina_result, SelinaResult):
+                raise TypeError("[Runtime]: Selina returned an invalid result.....")
+
+            refinement_count += 1
+
+        # ---------------------------------------------------------
+        # STEP 6: FINAL RESULT
+        # ---------------------------------------------------------
+        # Return the latest attempt, together with Gwen's final review.
+
         # The refinement loop will be added next.
         return RuntimeResult(
             user_request=user_input,
@@ -148,7 +184,7 @@ class Runtime:
             annie_result=annie_result,
             selina_result=selina_result,
             gwen_result=gwen_result,
-            final_result=selina_result,
+            final_result=selina_result
         )
 
 
