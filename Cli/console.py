@@ -6,6 +6,7 @@ from rich.panel import Panel
 import pandas as pd
 from Schedule_Bot.schedule_pharaser import csv_saver, reshape_to_long
 
+
 # Importing Roots
 from Path_mapper import SCHEDULE_CSV, DATA_ROOT
 
@@ -288,6 +289,45 @@ def run_fox_agent():
 def run_fox_club():
     from agent.fox.runtime.runtime import run_fox_club as _run
     _run()
+
+# this function calls the fox member for task..
+def run_fox_club():
+
+    # asking input from user
+    target = input(
+        "\n[Fox]: Enter the folder path to organise "
+        "(or press Enter to skip): "
+    ).strip()
+
+    # assigning a directory to perform nessary actions.....
+    target_dir = validate_target_dir(target)
+    runtime = build_runtime(target_dir)
+
+    console.print("[Fox]: Fox Club ready. Type 'exit' to return.")
+
+    # this loops till the error is recieved..
+    while True:
+        try:
+            # get the user input
+            user_input = input("\n[You]: ").strip()
+
+            # check if its user input or not (if recieved it stops the loop)
+            if not user_input:
+                continue
+
+            # break the loop if the below conditions are statisfied.....
+            if user_input.lower() in {"exit", "quit", "0"}:
+                break
+
+            result = runtime.handle(user_input)
+
+            console.print(f"\n[Fox]: {result}")
+
+        except KeyboardInterrupt:
+            console.print("\n[Fox]: Returning to main menu.")
+            break
+        except Exception as e:
+            console.print(f"[red][Fox]: Error: {e}[/red]")
 
 if __name__ == "__main__":
     # reading the csv file

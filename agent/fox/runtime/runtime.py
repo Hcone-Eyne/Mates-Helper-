@@ -21,9 +21,8 @@ console = Console()
 
 
 class _UnavailableExecutor:
-    """Executor used until the runtime is wired to real tools."""
+    """Placeholder executor used when no target directory is configured."""
 
-    # this function makes the missing tool wiring explicit instead of crashing
     def execute(self, action: str, arguments: dict[str, Any]) -> Any:
         raise RuntimeError(
             f"[Runtime]: No action executor is configured for '{action}'."
@@ -66,7 +65,6 @@ class Runtime:
         Final result
     """
 
-    # Adding refinement limits
     MAX_REFINEMENTS = 3
 
     def __init__(
@@ -76,18 +74,14 @@ class Runtime:
         selina: Selina,
         gwen: Gwen,
     ):
-        # this function stores each Club member for pipeline coordination
         self.julie = julie
         self.annie = annie
         self.selina = selina
         self.gwen = gwen
 
     def handle(self, user_input: str) -> RuntimeResult:
-        """
-        Send one user request through the Fox Club pipeline.
-        """
+        """Send one user request through the Fox Club pipeline."""
 
-        # this validates the incoming request before starting the pipeline
         if not isinstance(user_input, str):
             raise TypeError(
                 "[Runtime]: user_input must be a string."
@@ -139,21 +133,19 @@ class Runtime:
             )
 
         # ---------------------------------------------------------
-        # STEP 4: GWEN
+        # STEP 4: GWEN (handled by refinement loop below)
         # ---------------------------------------------------------
-        # changed -> Gwen review is handled by controlled refinement loop below!
 
 
         # ---------------------------------------------------------
-        # STEP 5: FINAL RESULT
+        # STEP 5: REFINEMENT LOOP
         # ---------------------------------------------------------
-        # For the first Runtime version, we return Selina's result
-        # together with Gwen's review.
-        
-        # refinment count if exceeed, refinement will be stoped by conditions.....
+        # Gwen reviews the current attempt.  If she rejects it and
+        # there are no safety concerns, Annie refines the handoff
+        # and Selina re-executes until Gwen approves or the limit
+        # is reached.
+
         refinement_count = 0
-
-        # loop for refiment process
         while True:
             # this asks Gwen to review the current pipeline attempt
             gwen_result = self.gwen.review_structured(
@@ -193,9 +185,7 @@ class Runtime:
         # ---------------------------------------------------------
         # STEP 6: FINAL RESULT
         # ---------------------------------------------------------
-        # Return the latest attempt, together with Gwen's final review.
-
-        # The refinement loop will be added next.
+        # Return the latest attempt together with Gwen's final review.
         return RuntimeResult(
             user_request=user_input,
             julie_result=julie_result,
@@ -211,7 +201,7 @@ def build_runtime(target_dir: str | Path | None = None) -> Runtime:
 
     When *target_dir* is provided, Selina receives a real
     FileActionExecutor scoped to that directory.  Otherwise the
-    legacy ``_UnavailableExecutor`` is used.
+    ``_UnavailableExecutor`` placeholder is used.
     """
     try:
         client = OllamaClient(model="qwen2.5:3b-instruct")
@@ -255,100 +245,3 @@ def validate_target_dir(raw_input: str) -> Path | None:
 
     return path
 
-
-def run_fox_club():
-    """Interactive CLI loop for the Fox Club pipeline."""
-    os.system("clear")
-
-    console.print(
-        Panel.fit(
-            "[bold green]Fox Club Pipeline[/bold green]\n"
-            "Flow: Julie -> Annie -> Selina -> Gwen",
-            title="[Fox]: Setup"
-        )
-    )
-
-    # Prompt for the target folder to organise.
-    target_input = input("\n[You]: Enter the folder path to organise (or press Enter to skip): ").strip()
-
-    target_dir = None
-    if target_input:
-        try:
-            target_dir = validate_target_dir(target_input)
-            console.print(f"[green][Fox]: Target folder set to {target_dir}[/green]")
-        except ValueError as exc:
-            console.print(f"[red][Fox]: {exc}[/red]")
-            console.print("[yellow][Fox]: Continuing without executor.[/yellow]")
-
-    try:
-        runtime = build_runtime(target_dir=target_dir)
-    except RuntimeError as exc:
-        console.print(f"[red][Fox]: {exc}[/red]")
-        input("\nPress Enter to continue...")
-        return
-
-    mode_label = f"Target: [cyan]{target_dir}[/cyan]" if target_dir else "Mode: [yellow]no executor[/yellow]"
-    console.print(
-        Panel.fit(
-            f"{mode_label}\n"
-            "Type [bold]exit[/bold] to return.",
-            title="[Fox]: Club Members"
-        )
-    )
-
-    while True:
-        try:
-            user_input = input("\n[You]: ").strip()
-
-            if not user_input:
-                continue
-
-            if user_input.lower() in {"exit", "quit", "0"}:
-                break
-
-            # Run the full pipeline.
-            result = runtime.handle(user_input)
-
-            # Display results step by step.
-            console.print(f"\n[bold cyan]--- Julie ---[/bold cyan]")
-            console.print(f"Task: {result.julie_result.expanded_task}")
-            console.print(f"Plan: {', '.join(result.julie_result.plan)}")
-            if result.julie_result.uncertainty:
-                console.print(f"Uncertainty: {', '.join(result.julie_result.uncertainty)}")
-
-            console.print(f"\n[bold cyan]--- Annie ---[/bold cyan]")
-            console.print(f"Interpretation: {result.annie_result.interpretation}")
-            console.print(f"Requirements: {', '.join(result.annie_result.requirements)}")
-            console.print(f"Constraints: {', '.join(result.annie_result.constraints)}")
-            console.print(f"Handoff: {result.annie_result.technical_handoff}")
-            if result.annie_result.clarification_needed:
-                console.print(f"Clarification: {', '.join(result.annie_result.clarification_needed)}")
-
-            console.print(f"\n[bold cyan]--- Selina ---[/bold cyan]")
-            console.print(f"Action: {result.selina_result.action}")
-            console.print(f"Success: {result.selina_result.success}")
-            console.print(f"Result: {result.selina_result.result}")
-            if result.selina_result.error:
-                console.print(f"Error: {result.selina_result.error}")
-
-            console.print(f"\n[bold cyan]--- Gwen ---[/bold cyan]")
-            gwen = result.gwen_result
-            status = "[green]APPROVED[/green]" if gwen.approved else "[red]REJECTED[/red]"
-            console.print(f"Status: {status}")
-            console.print(f"Critique: {gwen.critique}")
-            if gwen.issues:
-                console.print(f"Issues: {', '.join(gwen.issues)}")
-            if gwen.safety_concerns:
-                console.print(f"Safety: {', '.join(gwen.safety_concerns)}")
-            if gwen.recommendations:
-                console.print(f"Recommendations: {', '.join(gwen.recommendations)}")
-
-        except KeyboardInterrupt:
-            break
-        except Exception as exc:
-            console.print(f"\n[red][Fox]: Error: {exc}[/red]")
-            input("\nPress Enter to continue...")
-
-
-if __name__ == "__main__":
-    run_fox_club()

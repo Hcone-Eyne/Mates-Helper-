@@ -416,3 +416,112 @@ def test_validate_target_dir_tilde_expanded():
     result = validate_target_dir("~")
     assert result == Path("~").expanduser().resolve()
     assert result.is_dir()
+
+
+# ------------------------------------------------------------------
+# Runtime.handle() input validation tests
+# ------------------------------------------------------------------
+
+
+def test_runtime_handle_type_error_on_non_string_input():
+    """Runtime.handle() must raise TypeError when given a non-string."""
+    julie = FakeJulie()
+    annie = FakeAnnie()
+    selina = FakeSelina()
+    gwen = FakeGwen([
+        GwenResult(
+            approved=True, reasoning="", critique="",
+            issues=[], safety_concerns=[], recommendations=[],
+        )
+    ])
+    runtime = Runtime(julie=julie, annie=annie, selina=selina, gwen=gwen)
+
+    try:
+        runtime.handle(123)
+        assert False, "Should have raised TypeError"
+    except TypeError as exc:
+        assert "user_input must be a string" in str(exc)
+
+
+def test_runtime_handle_value_error_on_empty_string():
+    """Runtime.handle('') must raise ValueError."""
+    julie = FakeJulie()
+    annie = FakeAnnie()
+    selina = FakeSelina()
+    gwen = FakeGwen([
+        GwenResult(
+            approved=True, reasoning="", critique="",
+            issues=[], safety_concerns=[], recommendations=[],
+        )
+    ])
+    runtime = Runtime(julie=julie, annie=annie, selina=selina, gwen=gwen)
+
+    try:
+        runtime.handle("")
+        assert False, "Should have raised ValueError"
+    except ValueError as exc:
+        assert "user_input cannot be empty" in str(exc)
+
+
+def test_runtime_handle_whitespace_only_raises_value_error():
+    """Runtime.handle('   ') must raise ValueError."""
+    julie = FakeJulie()
+    annie = FakeAnnie()
+    selina = FakeSelina()
+    gwen = FakeGwen([
+        GwenResult(
+            approved=True, reasoning="", critique="",
+            issues=[], safety_concerns=[], recommendations=[],
+        )
+    ])
+    runtime = Runtime(julie=julie, annie=annie, selina=selina, gwen=gwen)
+
+    try:
+        runtime.handle("   ")
+        assert False, "Should have raised ValueError"
+    except ValueError as exc:
+        assert "user_input cannot be empty" in str(exc)
+
+
+def test_runtime_exception_from_annie_refine_propagates():
+    """If Annie.refine() raises, the exception must propagate from handle()."""
+
+    class FailingAnnie:
+        def structure(self, julie_result):
+            return AnnieResult(
+                user_request=julie_result.user_request,
+                interpretation="ok",
+                requirements=["test"],
+                constraints=[],
+                technical_handoff="ok",
+                clarification_needed=[],
+                raw_response="ok",
+            )
+
+        def refine(self, previous_result, selina_feedback):
+            raise RuntimeError("Ollama is down")
+
+    julie = FakeJulie()
+    annie = FailingAnnie()
+    selina = FakeSelina()
+    gwen = FakeGwen([
+        GwenResult(
+            approved=False, reasoning="Needs work.",
+            critique="Fix it.",
+            issues=["issue"], safety_concerns=[],
+            recommendations=["refine"],
+        ),
+        # This should never be reached — the exception must propagate first.
+        GwenResult(
+            approved=True, reasoning="", critique="",
+            issues=[], safety_concerns=[], recommendations=[],
+        ),
+    ])
+
+    runtime = Runtime(julie=julie, annie=annie, selina=selina, gwen=gwen)
+
+    try:
+        runtime.handle("test")
+        assert False, "Should have raised RuntimeError"
+    except RuntimeError as exc:
+        assert "Ollama is down" in str(exc)
