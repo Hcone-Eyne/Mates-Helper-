@@ -18,6 +18,7 @@ class FakeJulie:
     def __init__(self):
         self.calls = 0
 
+
     def reason(self, user_input):
         self.calls += 1
 
