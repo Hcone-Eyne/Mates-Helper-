@@ -14,7 +14,7 @@ from Path_mapper import SCHEDULE_CSV, DATA_ROOT
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
 from bot import load_schedule, query_handler
 from Finance_bot.Expense_analyzer import run_expense_analyzer
-from agent.ollama.ollama_agent import FoxAgent
+from brain.orchestrator import run_task, set_provider, get_provider
 
 # from Finance_bot
 from Finance_bot.operations_finder import operation_finder
@@ -231,108 +231,66 @@ def run_file_manager():
             console.print(f"[Fox]: Error Occured: {e}")
             input("\nPress Enter to continue...")
 
-# this function is ment for to run the fox agent, which performs a agentic tasks
+# this function is ment for to run the fox agent, which performs a agentic tasks (fixed)
 def run_fox_agent():
-
     os.system("clear")
 
-    # Import tool list so we can show it in the panel
-    from agent.ollama.tools import TOOLS
-
     try:
-        agent = FoxAgent()
-        tool_names = ", ".join(TOOLS.keys()) if TOOLS else "(none)"
         console.print(
             Panel.fit(
                 "\n".join(
                     [
                         "[bold green]Connected[/bold green]",
-                        f"Model: [cyan]{agent.model}[/cyan]",
-                        f"Tools: [yellow]{tool_names}[/yellow]",
-                        "Type [bold]exit[/bold] to return.",
+                        f"Provider: [cyan]{get_provider().capitalize()}[/cyan]",
+                        "Type [bold]/provider[/bold] to switch provider.",
+                        "Type [bold]exit[/bold] to return."
                     ]
                 ),
-                title = "[Fox]: Local Agent"
+                title="[Fox]: Agent"
             )
         )
+
         while True:
-                try:
-                    # getting input / cmd
-                    user_input = input("\n[You]: ").strip()
-
-                    # valaditaing the input
-                    if not user_input:
-                        continue
-
-                    # makin the input lower and checking for required keybord to exit
-                    if user_input.lower() in {
-                        "exit",
-                        "quit",
-                        "0"
-                    }:
-                        break
-
-                    response = agent.ask(user_input)
-
-                    console.print(f"\n[Fox]: {response}")
-
-                except KeyboardInterrupt:
+            try:
+                user_input = input("\n[You]: ").strip()
+                if not user_input:
+                    continue
+                if user_input.lower() in {"exit", "quit", "0"}:
                     break
+                if user_input.lower() in {"/provider", "provider"}:
+                    # display the available model in console
+                    console.print(
+                        Panel.fit(
+                            "\n".join(
+                                [
+                                    "[bold blue]1[/bold blue]. Ollama [dim](local)[/dim]",
+                                    "[bold blue]2[/bold blue]. Anthropic [dim](Cloud)[/dim]",
+                                    "[bold blue]0[/bold blue]. Cancel"
+                                ]
+                            ),
+                            title="[Fox]: Provider"
+                        )
+                    )
 
+                    choice = input("\n[Fox]: Choose provider: ").strip()
+
+                    if choice == "1":
+                        console.print(set_provider("ollama"))
+                    elif choice == "2":
+                        console.print(set_provider("anthropic"))
+                    elif choice == "0":
+                        console.print("[Fox]: Provider unchanged")
+                    else:
+                        console.print("[Fox]: Invalid choice.")
+
+                    continue
+
+                response = run_task(user_input)
+                console.print(f"\n[Fox]: {response}")
+            except KeyboardInterrupt:
+                break
     except Exception as e:
         console.print(
-            f"[red][Fox]: Agent error: {e}[/red]")
-
+            f"[red][Fox]: Agent error: {e}[/red]"
+        )
         input("\nPress Enter to continue...")
-
-# this function runs the Fox Club pipeline (Julie -> Annie -> Selina -> Gwen)
-def run_fox_club():
-    from agent.fox.runtime.runtime import run_fox_club as _run
-    _run()
-
-# this function calls the fox member for task..
-def run_fox_club():
-
-    # asking input from user
-    target = input(
-        "\n[Fox]: Enter the folder path to organise "
-        "(or press Enter to skip): "
-    ).strip()
-
-    # assigning a directory to perform nessary actions.....
-    target_dir = validate_target_dir(target)
-    runtime = build_runtime(target_dir)
-
-    console.print("[Fox]: Fox Club ready. Type 'exit' to return.")
-
-    # this loops till the error is recieved..
-    while True:
-        try:
-            # get the user input
-            user_input = input("\n[You]: ").strip()
-
-            # check if its user input or not (if recieved it stops the loop)
-            if not user_input:
-                continue
-
-            # break the loop if the below conditions are statisfied.....
-            if user_input.lower() in {"exit", "quit", "0"}:
-                break
-
-            result = runtime.handle(user_input)
-
-            console.print(f"\n[Fox]: {result}")
-
-        except KeyboardInterrupt:
-            console.print("\n[Fox]: Returning to main menu.")
-            break
-        except Exception as e:
-            console.print(f"[red][Fox]: Error: {e}[/red]")
-
-if __name__ == "__main__":
-    # reading the csv file
-    # NEW - using your Path_mapper constant!
-    data = pd.read_csv(SCHEDULE_CSV)
-    # displaying the data in a table format
-    display_table(data)
-    run_scheduler()
