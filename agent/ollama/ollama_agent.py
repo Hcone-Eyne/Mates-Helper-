@@ -4,6 +4,7 @@
 import re
 from .client import OllamaClient
 from .tools import TOOLS, dispatch, tool_prompt_block
+from agent.fox.fox import Fox
 
 # Maximum tool-call iterations per user message (prevents infinite loops)
 MAX_TOOL_TURNS = 5
@@ -110,12 +111,20 @@ class FoxAgent:
         response = agent.ask("what's my schedule today?")
     """
 
-    def __init__(self, model=None):
-        self.client = OllamaClient(model=model)
+    def __init__(self, model=None, think = False):
+        self.client = OllamaClient(model=model, think = think)
         self.system_prompt = _build_system_prompt()
         self.messages = [
             {"role": "system", "content": self.system_prompt}
         ]
+
+    @ property
+    def think(self):
+        return self.client.think
+
+    @think.setter
+    def think(self, value):
+        return self.client.think
 
     def ask(self, user_input):
         """Send a message and return the final text response.
@@ -164,3 +173,19 @@ class FoxAgent:
     @property
     def model(self):
         return self.client.model
+
+# adding fox club access member....
+class OllamaFoxAgent:
+
+    # adding initializer
+    def __init__(self, model = None):
+        self.model = model
+        self.fox_club = Fox()
+
+    # code for runtime..
+    def attach_runtime(self, runtime):
+        self.fox.attach_runtime(runtime)
+
+    # route query to fox Club!
+    def ask(self, task:str):
+        return self.fox_club.run(task)

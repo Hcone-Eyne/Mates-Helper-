@@ -12,10 +12,11 @@ from .discovery import discover_ollama
 class OllamaClient:
 
     # setting up the constructor!
-    def __init__(self, host = None, model = None):
+    def __init__(self, host = None, model = None, think = False):
         info = discover_ollama()
 
         self.host = (host or info["host"]).rstrip("/")
+        self.think = think 
         available_models = [model.get("name", "") for model in info.get("models", [])]
 
         if model and model in available_models:
@@ -37,12 +38,13 @@ class OllamaClient:
         return names[0]
         
     # this function handles the chat
-    def chat(self, messages, stream = False):
+    def chat(self, messages, stream = False, think = None):
 
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": stream,
+            "think": self.think if think is None else think
         }
 
         data = json.dumps(payload).encode("utf-8")

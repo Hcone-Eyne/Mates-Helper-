@@ -275,3 +275,52 @@ _register(
     params=[{"name": "url", "type": "str", "desc": "URL to load and read"}],
     fn=_web_browse,
 )
+
+# Fox Club member tool
+
+_fox_club_runtime = None
+
+
+def _get_fox_club_runtime():
+    global _fox_club_runtime
+
+    from agent.fox.runtime.runtime import build_runtime
+    from File_Manager.organizer import VAULT_ROOT, ensure_vault
+    from brain.orchestrator import get_think
+
+    if _fox_club_runtime is None:
+        ensure_vault()
+        _fox_club_runtime = build_runtime(target_dir=VAULT_ROOT, think=get_think())
+    return _fox_club_runtime
+
+
+def _fox_club_task(request=""):
+    request = request.strip()
+    if not request:
+        return "[Fox]: Give me a file task, e.g. 'organise my files by type' or 'list what's in the vault'. "
+
+    runtime = _get_fox_club_runtime()
+    result = runtime.handle(request)
+    selina = result.selina_result
+    gwen = result.gwen_result
+
+    lines = [f"[Fox Club] Action: {selina.action or 'none determined'}"]
+    if selina.success:
+        lines.append(f"Result: {selina.result}")
+    else:
+        lines.append(f"Result: {selina.result}")
+    lines.append(f"Reviewed by Gwen: {'approved' if gwen.approved else 'flagged for review'}")
+    if gwen.critique:
+        lines.append(f"Gwen's note: {gwen.critique}")
+    return "\n".join(lines)
+
+
+_register(
+    name="fox_club_task",
+    description=(
+        "Run a file task (list, sort, or organise files) through the Julie->Annie->"
+        "Selina->Gwen review pipeline. Scoped to the app's Vault folder."
+    ),
+    params=[{"name": "request", "type": "str", "desc": "What to do, e.g. 'organise files by type'"}],
+    fn=_fox_club_task,
+)

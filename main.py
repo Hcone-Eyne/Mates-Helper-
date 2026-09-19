@@ -32,12 +32,16 @@ def menu_bar():
 def run():
     # adding loop to ask it repeatively
     while True:
-        os.system('clear')
-        # showing the menu_bar
-        menu_bar()
-        # leting user to choose option
-        console.print("[Fox]: Enter option.....")
-        choice = input("\n<:=:>").strip()
+        try:
+            os.system('clear')
+            # showing the menu_bar
+            menu_bar()
+            # leting user to choose option
+            console.print("[Fox]: Enter option.....")
+            choice = input("\n<:=:").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[Fox]: Session ended. Goodbye.")
+            break
 
         # choice based execution
         if choice == "1":
@@ -53,7 +57,11 @@ def run():
             break
         else:
             console.print("[Fox]: Invalid option, try again.")
-            input("\nPress Enter to continue...")
+            try:
+                input("\nPress Enter to continue...")
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[Fox]: Session ended. Goodbye.")
+                break
 
 
         

@@ -9,6 +9,7 @@ from Schedule_Bot.schedule_pharaser import csv_saver, reshape_to_long
 
 # Importing Roots
 from Path_mapper import SCHEDULE_CSV, DATA_ROOT
+from brain.orchestrator import run_task, set_provider, get_provider, set_think, get_think
 
 # MOre imports
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
@@ -235,63 +236,77 @@ def run_file_manager():
 def run_fox_agent():
     os.system("clear")
 
-    try:
-        console.print(
-            Panel.fit(
-                "\n".join(
-                    [
-                        "[bold green]Connected[/bold green]",
-                        f"Provider: [cyan]{get_provider().capitalize()}[/cyan]",
-                        "Type [bold]/provider[/bold] to switch provider.",
-                        "Type [bold]exit[/bold] to return."
-                    ]
-                ),
-                title="[Fox]: Agent"
-            )
+    console.print(
+        Panel.fit(
+            "\n".join([
+                "[bold green]Connected[/bold green]",
+                f"Provider: [cyan]{get_provider().capitalize()}[/cyan]",
+                f"Thinking: [cyan]{'on' if get_think() else 'off'}[/cyan]",
+                "Type [bold]/provider[/bold] to switch provider.",
+                "Type [bold]/think[/bold] to toggle thinking mode.",
+                "Type [bold]exit[/bold] to return."
+            ]),
+            title="[Fox]: Agent"
         )
+    )
 
-        while True:
-            try:
-                user_input = input("\n[You]: ").strip()
-                if not user_input:
-                    continue
-                if user_input.lower() in {"exit", "quit", "0"}:
-                    break
-                if user_input.lower() in {"/provider", "provider"}:
-                    # display the available model in console
-                    console.print(
-                        Panel.fit(
-                            "\n".join(
-                                [
-                                    "[bold blue]1[/bold blue]. Ollama [dim](local)[/dim]",
-                                    "[bold blue]2[/bold blue]. Anthropic [dim](Cloud)[/dim]",
-                                    "[bold blue]0[/bold blue]. Cancel"
-                                ]
-                            ),
-                            title="[Fox]: Provider"
-                        )
-                    )
-
-                    choice = input("\n[Fox]: Choose provider: ").strip()
-
-                    if choice == "1":
-                        console.print(set_provider("ollama"))
-                    elif choice == "2":
-                        console.print(set_provider("anthropic"))
-                    elif choice == "0":
-                        console.print("[Fox]: Provider unchanged")
-                    else:
-                        console.print("[Fox]: Invalid choice.")
-
-                    continue
-
-                response = run_task(user_input)
-                console.print(f"\n[Fox]: {response}")
-            except KeyboardInterrupt:
+    while True:
+        try:
+            user_input = input("\n[You]: ").strip()
+            if not user_input:
+                continue
+            if user_input.lower() in {"exit", "quit", "0"}:
                 break
-    except Exception as e:
-        console.print(
-            f"[red][Fox]: Agent error: {e}[/red]"
-        )
-        input("\nPress Enter to continue...")
-        
+
+            if user_input.lower() in {"/provider", "provider"}:
+                console.print(
+                    Panel.fit(
+                        "\n".join([
+                            "[bold blue]1[/bold blue]. Ollama [dim](local)[/dim]",
+                            "[bold blue]2[/bold blue]. Anthropic [dim](Cloud)[/dim]",
+                            "[bold blue]0[/bold blue]. Cancel"
+                        ]),
+                        title="[Fox]: Provider"
+                    )
+                )
+                choice = input("\n[Fox]: Choose provider: ").strip()
+                if choice == "1":
+                    console.print(set_provider("ollama"))
+                elif choice == "2":
+                    console.print(set_provider("anthropic"))
+                elif choice == "0":
+                    console.print("[Fox]: Provider unchanged")
+                else:
+                    console.print("[Fox]: Invalid choice.")
+                continue
+
+            if user_input.lower() in {"/think", "think"}:
+                console.print(
+                    Panel.fit(
+                        "\n".join([
+                            "[bold blue]1[/bold blue]. Enable (slower, more careful)",
+                            "[bold blue]2[/bold blue]. Disable (fast, default)",
+                            "[bold blue]0[/bold blue]. Cancel"
+                        ]),
+                        title="[Fox]: Thinking Mode"
+                    )
+                )
+                choice = input("\n[Fox]: Choose: ").strip()
+                if choice == "1":
+                    console.print(set_think(True))
+                elif choice == "2":
+                    console.print(set_think(False))
+                elif choice == "0":
+                    console.print("[Fox]: Unchanged")
+                else:
+                    console.print("[Fox]: Invalid choice.")
+                continue
+
+            response = run_task(user_input)
+            console.print(f"\n[Fox]: {response}")
+
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            console.print(f"[red][Fox]: Agent error: {e}[/red]")
+            console.print("[Fox]: Still here — try again, or type exit.")

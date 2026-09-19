@@ -25,6 +25,16 @@ SYSTEM_PROMPT = (
     "needs them; otherwise just answer directly. Keep replies short."
 )
 
+CURRENT_PROVIDER = "ollama"
+CURRENT_THINK = False
+
+def get_think():
+    return CURRENT_THINK
+
+def set_think(value:bool):
+    global CURRENT_THINK
+    CURRENT_THINK = value
+    return f"[Fox]: Thinking mode {'enabled' if value else 'disabled'}."
 
 def get_provider(provider: str | None = None) -> str:
     """Return the active provider name or the requested provider name."""
@@ -89,7 +99,7 @@ def run_task(task_description: str, provider: str | None = None):
         return local_cmd
 
     if provider_name == "ollama":
-        return FoxAgent().ask(task_description)
+        return FoxAgent(think=get_think()).ask(task_description)
 
     if provider_name == "anthropic":
         try:

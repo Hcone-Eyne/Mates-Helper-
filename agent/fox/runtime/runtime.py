@@ -204,7 +204,7 @@ def build_runtime(target_dir: str | Path | None = None) -> Runtime:
     ``_UnavailableExecutor`` placeholder is used.
     """
     try:
-        client = OllamaClient(model="qwen2.5:3b-instruct")
+        client = OllamaClient(model="qwen3:4b", think = think)
     except RuntimeError as exc:
         raise RuntimeError(
             f"[Runtime]: Cannot start — Ollama is unavailable: {exc}"
