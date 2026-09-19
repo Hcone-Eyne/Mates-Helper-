@@ -108,7 +108,7 @@ def run_task(task_description: str, provider: str | None = None):
         return local_cmd
 
     if provider_name == "ollama":
-        return FoxAgent(think=get_think()).ask(task_description)
+        return FoxAgent(model=get_model(), think=get_think()).ask(task_description)
 
     if provider_name == "anthropic":
         try:
