@@ -5,7 +5,12 @@ import re
 from pathlib import Path
 import pdfplumber
 import pandas as pd
-import plotext as plt2
+
+try:
+    import plotext as plt2
+except ModuleNotFoundError:  # pragma: no cover - optional visualization dependency
+    plt2 = None
+
 from rich.console import Console
 from rich.panel import Panel
 
@@ -169,6 +174,8 @@ def print_summary(summary: dict):
 
 # this function displays a bar chart of spending by category
 def plot_category_bar(summary: dict):
+    if plt2 is None:
+        raise RuntimeError("plotext is required for chart rendering.")
     by_category = summary["by_category"]
     plt2.bar(by_category.index.tolist(), by_category.values.tolist())
     plt2.title(f"Spend by Category — {summary['month']}")

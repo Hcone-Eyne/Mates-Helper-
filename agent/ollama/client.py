@@ -29,12 +29,22 @@ class OllamaClient:
     # this function is met to choose a model
     def _select_model(self, models):
 
-        # this checks if the model is present 
+        # this checks if the model is present
         if not models:
             raise RuntimeError(
                 f"[Fox]: No Ollama model is found. Pull a model first."
             )
-        names = [model.get("name", "") for model in models]
+
+        names = [model.get("name", "") for model in models if model.get("name")]
+        if not names:
+            raise RuntimeError(
+                f"[Fox]: No Ollama model is found. Pull a model first."
+            )
+
+        qwen_models = [name for name in names if "qwen" in name.lower()]
+        if qwen_models:
+            return qwen_models[0]
+
         return names[0]
         
     # this function handles the chat

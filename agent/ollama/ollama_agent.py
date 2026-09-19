@@ -6,6 +6,9 @@ from .client import OllamaClient
 from .tools import TOOLS, dispatch, tool_prompt_block
 from agent.fox.fox import Fox
 
+# more imports
+from agent.fox.runtime.runtime import build_runtime
+
 # Maximum tool-call iterations per user message (prevents infinite loops)
 MAX_TOOL_TURNS = 5
 
@@ -112,19 +115,19 @@ class FoxAgent:
     """
 
     def __init__(self, model=None, think = False):
-        self.client = OllamaClient(model=model, think = think)
+        self.client = OllamaClient(model=model, think=think)
         self.system_prompt = _build_system_prompt()
         self.messages = [
             {"role": "system", "content": self.system_prompt}
         ]
 
-    @ property
+    @property
     def think(self):
         return self.client.think
 
     @think.setter
     def think(self, value):
-        return self.client.think
+        self.client.think = value
 
     def ask(self, user_input):
         """Send a message and return the final text response.
@@ -178,14 +181,24 @@ class FoxAgent:
 class OllamaFoxAgent:
 
     # adding initializer
-    def __init__(self, model = None):
+    def __init__(self, model = None, think = False, target_dir = None):
         self.model = model
+        self.think = think
+        self.target_dir = target_dir
+
+        # start the fox!
         self.fox_club = Fox()
+
+        # Fox Club Pipeline
+        self.runtime = build_runtime(model=model, think=think, target_dir=target_dir)
+
+        # attach runtime to fox
+        self.fox_club.attach_runtime(self.runtime)
 
     # code for runtime..
     def attach_runtime(self, runtime):
-        self.fox.attach_runtime(runtime)
+        self.fox_club.attach_runtime(runtime)
 
     # route query to fox Club!
     def ask(self, task:str):
-        return self.fox_club.run(task)
+        return self.fox_club.ask(task)

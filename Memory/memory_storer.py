@@ -4,7 +4,11 @@
 from rich.console import Console
 from rich.panel import Panel
 import pandas as pd
-import plotext as plt2
+
+try:
+    import plotext as plt2
+except ModuleNotFoundError:  # pragma: no cover - optional visualization dependency
+    plt2 = None
 
 console = Console()
 # ading a variable to store the previous operations and results
@@ -76,6 +80,8 @@ def memory_lister():
 
 # this function is going to show off the graph in line and rest is all we know1
 def plot_line_line(df):
+    if plt2 is None:
+        raise RuntimeError("plotext is required for chart rendering.")
     plt2.plot(df.index.tolist(), df["result"].tolist())
     plt2.title("Results over Sessions")
     plt2.xlabel("Entry Number")
@@ -85,6 +91,8 @@ def plot_line_line(df):
 
 # this function is going to show off the graph in bar chart
 def plot_bar(df):
+    if plt2 is None:
+        raise RuntimeError("plotext is required for chart rendering.")
     plt2.bar(df["expression"].tolist(), df["result"].tolist())
     plt2.title("Results over Expressions")
     plt2.xlabel("Expression")
@@ -94,6 +102,8 @@ def plot_bar(df):
 
 # this function is going to show off the graph in histogram
 def plot_histogram(df): 
+    if plt2 is None:
+        raise RuntimeError("plotext is required for chart rendering.")
     plt2.hist(df["result"].tolist(), bins=10)
     plt2.title("Distribution of Results")
     plt2.xlabel("Result")

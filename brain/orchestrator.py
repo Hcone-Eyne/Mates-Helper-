@@ -27,6 +27,15 @@ SYSTEM_PROMPT = (
 
 CURRENT_PROVIDER = "ollama"
 CURRENT_THINK = False
+_CURRENT_MODEL = None
+
+def get_model():
+    return _CURRENT_MODEL
+
+
+def set_model(model):
+    global _CURRENT_MODEL
+    _CURRENT_MODEL = model
 
 def get_think():
     return CURRENT_THINK

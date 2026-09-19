@@ -13,11 +13,28 @@ from agent.annie.annie import AnnieResult
 # Explicit mapping of supported actions to their trigger keywords.
 # Each keyword is matched as a whole word inside a normalized requirement.
 # To add a new action, add an entry here AND implement it in the executor.
-SUPPORTED_ACTIONS: dict[str, list[str]] = {
-    "organise_folder": ["organise", "organize", "sort", "categorize"],
-    "list_directory":  ["list", "show", "display"],
+SUPPORTED_ACTIONS = {
+    "organise_folder": [
+        "organise",
+        "organize",
+        "sort",
+        "categorize",
+        "category",
+    ],
+    "list_directory": [
+        "list",
+        "show",
+        "display",
+        "contents",
+        "directory",
+    ],
+    "find_files": [
+        "search",
+        "find",
+        "locate",
+        "look",
+    ],
 }
-
 
 def _resolve_action(requirements: list[str]) -> str:
     """Scan all requirements and return the first matching supported action.

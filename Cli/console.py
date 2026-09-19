@@ -3,23 +3,24 @@ import os
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich.prompt import Prompt
 import pandas as pd
 from Schedule_Bot.schedule_pharaser import csv_saver, reshape_to_long
 
 
 # Importing Roots
 from Path_mapper import SCHEDULE_CSV, DATA_ROOT
-from brain.orchestrator import run_task, set_provider, get_provider, set_think, get_think
 
 # MOre imports
 from Schedule_Bot.OCR_Extractor import extract_table, corrupt_finder, corrupt_fixer, review_edit
 from bot import load_schedule, query_handler
 from Finance_bot.Expense_analyzer import run_expense_analyzer
-from brain.orchestrator import run_task, set_provider, get_provider
 
 # from Finance_bot
 from Finance_bot.operations_finder import operation_finder
 from Memory.memory_storer import memory_lister, memory_catcher
+from brain.orchestrator import (run_task, set_provider, get_provider, set_think, get_think, set_model, get_model,)
+from agent.ollama.discovery import discover_ollama
 
 # creating a console object
 console = Console()
@@ -244,6 +245,7 @@ def run_fox_agent():
                 f"Thinking: [cyan]{'on' if get_think() else 'off'}[/cyan]",
                 "Type [bold]/provider[/bold] to switch provider.",
                 "Type [bold]/think[/bold] to toggle thinking mode.",
+                "Type [bold]/model[/bold] to choose a model."
                 "Type [bold]exit[/bold] to return."
             ]),
             title="[Fox]: Agent"
@@ -280,6 +282,10 @@ def run_fox_agent():
                     console.print("[Fox]: Invalid choice.")
                 continue
 
+            if user_input.lower() in {"/model", "model"}:
+                select_ollama_model()
+                continue
+            
             if user_input.lower() in {"/think", "think"}:
                 console.print(
                     Panel.fit(
@@ -310,3 +316,66 @@ def run_fox_agent():
         except Exception as e:
             console.print(f"[red][Fox]: Agent error: {e}[/red]")
             console.print("[Fox]: Still here — try again, or type exit.")
+
+def select_ollama_model():
+    try:
+        info = discover_ollama()
+    except Exception as e:
+        console.print(f"[bold red][Fox]: Could not connect to Ollama:[/bold red] {e}")
+        return
+
+    models = info.get("models", [])
+    current_model = get_model()
+
+    if not models:
+        console.print("[bold red][Fox]: No Ollama models found.[/bold red]")
+        console.print("[Fox]: Pull a model first using Ollama.")
+        return
+
+    console.print(
+        Panel.fit(
+            "[bold cyan]Ollama Models[/bold cyan]\n"
+            "Select a model or use Auto selection.",
+            title="[Fox]",
+        )
+    )
+
+    if current_model is None:
+        console.print("[bold green]Current: Auto[/bold green]")
+    else:
+        console.print(f"[bold green]Current: {current_model}[/bold green]")
+
+    console.print()
+    console.print("[cyan]0.[/cyan] Auto select.")
+
+    for index, model in enumerate(models, start=1):
+        name = model.get("name", "")
+        if name == current_model:
+            console.print(f"[cyan]{index}.[/cyan] {name} [green](current)[/green]")
+        else:
+            console.print(f"[cyan]{index}.[/cyan] {name}")
+
+    try:
+        choice = Prompt.ask("[Fox]: Choose model", default="0")
+        choice = int(choice)
+    except ValueError:
+        console.print("[red][Fox]: Invalid selection.[/red]")
+        return
+
+    if choice == 0:
+        set_model(None)
+        console.print("[green][Fox]: Model selection set to Auto.[/green]")
+        return
+
+    if 1 <= choice <= len(models):
+        selected = models[choice - 1].get("name", "")
+        if not selected:
+            console.print("[red][Fox]: Invalid model selection.[/red]")
+            return
+
+        set_model(selected)
+        console.print(f"[green][Fox]: Model selected: {selected}[/green]")
+        return
+
+    console.print("[red][Fox]: Invalid model selection.[/red]")
+

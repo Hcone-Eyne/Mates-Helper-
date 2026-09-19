@@ -196,15 +196,13 @@ class Runtime:
         )
 
 
-def build_runtime(target_dir: str | Path | None = None) -> Runtime:
-    """Create a Runtime wired to a local Ollama server.
-
-    When *target_dir* is provided, Selina receives a real
-    FileActionExecutor scoped to that directory.  Otherwise the
-    ``_UnavailableExecutor`` placeholder is used.
-    """
+def build_runtime(target_dir: str | Path | None = None, model: str | None = None, think: bool = False) -> Runtime:
+    """Create a Runtime wired to a local Ollama server."""
     try:
-        client = OllamaClient(model="qwen3:4b", think = think)
+        client = OllamaClient(
+            model=model,
+            think=think
+        )
     except RuntimeError as exc:
         raise RuntimeError(
             f"[Runtime]: Cannot start — Ollama is unavailable: {exc}"
@@ -221,8 +219,12 @@ def build_runtime(target_dir: str | Path | None = None) -> Runtime:
     selina = Selina(executor)
     gwen = Gwen(OllamaCriticBackend(client))
 
-    return Runtime(julie=julie, annie=annie, selina=selina, gwen=gwen)
-
+    return Runtime(
+        julie=julie,
+        annie=annie,
+        selina=selina,
+        gwen=gwen
+    )
 
 def validate_target_dir(raw_input: str) -> Path | None:
     """Validate and resolve a user-supplied target directory path.
