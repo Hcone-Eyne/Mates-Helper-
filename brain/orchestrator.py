@@ -89,13 +89,13 @@ def run_task(task_description: str, provider: str | None = None):
         return local_cmd
 
     if provider_name == "ollama":
-        return FoxAgent(model="qwen2.5:3b-instruct").ask(task_description)
+        return FoxAgent().ask(task_description)
 
     if provider_name == "anthropic":
         try:
             client = _get_anthropic_client()
         except RuntimeError:
-            return FoxAgent(model="qwen2.5:3b-instruct").ask(task_description)
+            return FoxAgent().ask(task_description)
 
         messages = [{"role": "user", "content": task_description}]
 

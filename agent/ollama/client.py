@@ -1,6 +1,7 @@
 # this program handles the communication with ollama directly!
 
 # importing the nessary modules
+import os
 import json
 import urllib.request
 import urllib.error
@@ -15,10 +16,14 @@ class OllamaClient:
         info = discover_ollama()
 
         self.host = (host or info["host"]).rstrip("/")
-        self.model = model
+        available_models = [model.get("name", "") for model in info.get("models", [])]
 
-        if not self.model:
+        if model and model in available_models:
+            self.model = model
+        elif model and model not in available_models:
             self.model = self._select_model(info["models"])
+        else:
+            self.model = os.environ.get("OLLAMA_MODEL") or self._select_model(info["models"])
 
     # this function is met to choose a model
     def _select_model(self, models):
@@ -29,13 +34,6 @@ class OllamaClient:
                 f"[Fox]: No Ollama model is found. Pull a model first."
             )
         names = [model.get("name", "") for model in models]
-
-        # my prefered option is hardcoded......
-        for name in names:
-            if "qwen2.5:3b-instruct" in name.lower():
-                return name
-
-        # else use the 1st installed model
         return names[0]
         
     # this function handles the chat
@@ -65,7 +63,13 @@ class OllamaClient:
                 )
 
             return result
-
+        # to catch the error
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read().decode("utf-8")
+            except Exception:
+                detail = str(e)
+            raise RuntimeError(f"Ollama API error ({e.code}) at {self.host}/api/chat: {detail}") from e
         except urllib.error.URLError as e:
             raise RuntimeError(
                 f"Could not connect to Ollama at {self.host}: {e}"

@@ -294,3 +294,4 @@ def run_fox_agent():
             f"[red][Fox]: Agent error: {e}[/red]"
         )
         input("\nPress Enter to continue...")
+        
