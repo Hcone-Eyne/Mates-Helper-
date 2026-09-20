@@ -5,7 +5,38 @@ import sys
 from pathlib import Path
 
 from phone.bridge.kdeconnect import KDEConnectBridge, KDEConnectError
+from phone.security.permission import (
+    PhonePermision,
+    READ_ONLY,
+    ACTION_PERMISSION,
+    DEFAULT_PERMISSIONS,
+    permission_label,
+    is_allowed,
+)
 
+def _permission_symbol(allowed: bool):
+    return "✓" if allowed else "○"
+
+def show_permission(bridge: KDEConnectBridge, device: str | None = None):
+    print("\n PHONE PERMISSIONS.")
+    print("=" * 40)
+
+    if device:
+        print(f"Device: {device}")
+    else:
+        print("Device: Default")
+
+    print("\nREAD")
+    print("-" * 40)
+
+    all_permissions = sorted(
+        READ_ONLY | ACTION_PERMISSION,
+        key=lambda permission: permission.value,
+    )
+
+    for permission in all_permissions:
+        allowed = is_allowed(permission, DEFAULT_PERMISSIONS)
+        print(f"{permission_label(permission):<20}{_permission_symbol(allowed)}")
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -36,6 +67,9 @@ def main() -> None:
     text_parser = sub.add_parser("share-text")
     text_parser.add_argument("text")
     text_parser.add_argument("--device")
+
+    permissions_parser = sub.add_parser("permissions")
+    permissions_parser.add_argument("--device")
 
     args = parser.parse_args()
 
@@ -70,6 +104,9 @@ def main() -> None:
 
         elif args.command == "share-text":
             print(bridge.share_text(args.text, args.device))
+
+        elif args.command == "permissions":
+            show_permission(bridge, args.device)
 
     except KDEConnectError as exc:
         print(f"Error: {exc}", file=sys.stderr)

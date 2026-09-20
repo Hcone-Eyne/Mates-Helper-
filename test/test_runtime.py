@@ -338,27 +338,32 @@ def test_build_runtime_with_target_dir_wires_file_action_executor():
         shutil.rmtree(tmp)
 
 
-def test_build_runtime_without_target_dir_wires_unavailable_executor():
-    """build_runtime() with no target must use _UnavailableExecutor."""
+def test_build_runtime_without_target_dir_uses_fox_space():
+    """build_runtime() with no target uses Fox Space as default."""
     with patch("agent.fox.runtime.runtime.OllamaClient") as mock_client_cls:
         mock_client_cls.return_value = MagicMock()
         runtime = build_runtime()
 
-    assert isinstance(runtime.selina.executor, _UnavailableExecutor)
+    # Executor should be a FileActionExecutor with Fox Space boundary
+    from agent.fox.runtime.executor import FileActionExecutor
+    from agent.fox.Fox_Space import get_fox_space
+    assert isinstance(runtime.selina.executor, FileActionExecutor)
+    assert runtime.selina.executor._target == get_fox_space().resolve()
 
 
-def test_build_runtime_none_does_not_create_filesystem_target():
-    """build_runtime(None) must not create any directory as a side effect."""
+def test_build_runtime_none_uses_fox_space():
+    """build_runtime(None) uses Fox Space as default."""
     with patch("agent.fox.runtime.runtime.OllamaClient") as mock_client_cls:
         mock_client_cls.return_value = MagicMock()
-        # Pass None explicitly — same as calling with no arguments.
         runtime = build_runtime(target_dir=None)
 
-    # Executor must be the unavailable placeholder.
-    assert isinstance(runtime.selina.executor, _UnavailableExecutor)
+    from agent.fox.runtime.executor import FileActionExecutor
+    from agent.fox.Fox_Space import get_fox_space
+    assert isinstance(runtime.selina.executor, FileActionExecutor)
+    assert runtime.selina.executor._target == get_fox_space().resolve()
 
-    # The executor must not have a _target attribute (it's not filesystem-aware).
-    assert not hasattr(runtime.selina.executor, "_target")
+    # The executor must have a _target attribute (it's filesystem-aware).
+    assert hasattr(runtime.selina.executor, "_target")
 
 
 # ------------------------------------------------------------------
