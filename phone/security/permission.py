@@ -15,7 +15,7 @@ class PhonePermision(str, Enum):
     MAKE_CALL = "make_call"
 
 READ_ONLY = {
-    PhonePermision.STATUS, 
+    PhonePermision.Status, 
     PhonePermision.NOTIFICATIONS,
     PhonePermision.CALLS,
     PhonePermision.MESSAGES,
