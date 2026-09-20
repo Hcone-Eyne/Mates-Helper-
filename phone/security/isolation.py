@@ -11,4 +11,4 @@ def assert_phone_boundary(source: str):
         "agent",
         "ollama"
     }:
-    raise PhoneIsolationError("Phone data is isolated from agent!")
+        raise PhoneIsolationError("Phone data is isolated from agent!")
