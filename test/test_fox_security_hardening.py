@@ -271,3 +271,20 @@ def test_boundary_root_cannot_be_changed(tmp_path):
 
     with pytest.raises(FoxSecurityError):
         boundary._trash_dir = tmp_path / "evil-trash"
+
+def test_get_area_workspace(tmp_path):
+    boundary = FoxSecurityBoundary(tmp_path / "fox")
+
+    path = boundary.root / "workspace" / "test.txt"
+
+    assert boundary._get_area(path) == "workspace"
+
+
+def test_get_area_system(tmp_path):
+    boundary = FoxSecurityBoundary(tmp_path / "fox")
+
+    path = boundary.root / "system" / "runtime.json"
+
+    assert boundary._get_area(path) == "system"
+
+

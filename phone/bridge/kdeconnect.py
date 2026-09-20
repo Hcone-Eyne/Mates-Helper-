@@ -35,6 +35,17 @@ class KDEConnectBridge:
         except subprocess.CalledProcessError as exc:
             message = exc.stderr.strip() or exc.stdout.strip()
 
+            # Defensive: surface the common "No such object path" failure
+            # which typically means the KDE Connect daemon isn't properly
+            # connected to the device (mDNS/network binding issue), not a
+            # problem with the CLI invocation itself.
+            if "No such object path" in message:
+                message = (
+                    "KDE Connect daemon isn't responding — check the D-Bus "
+                    "service registration and daemon health (mDNS/network "
+                    "binding issue). Original error: " + message
+                )
+
             raise KDEConnectError(
                 message or
                 f"KDE Connect command failed: {' '.join(args)}"

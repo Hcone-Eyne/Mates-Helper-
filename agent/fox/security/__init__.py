@@ -1,5 +1,7 @@
 # Fox Security Boundary - Public API
 
+from .policy import FoxDirectoryPolicy, FoxPolicyError
+
 from .boundary import (
     FoxSecurityBoundary,
     FoxSecurityError,
@@ -10,6 +12,8 @@ from .boundary import (
 )
 
 __all__ = [
+    "FoxDirectoryPolicy",
+    "FoxPolicyError",
     "FoxSecurityBoundary",
     "FoxSecurityError",
     "InvalidActionError",
@@ -17,3 +21,4 @@ __all__ = [
     "PrivilegedActionError",
     "SymlinkEscapeError",
 ]
+

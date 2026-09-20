@@ -84,6 +84,16 @@ class FoxSecurityBoundary:
 
     TRASH_DIR = ".fox_trash"
 
+    READ_ONLY_DIRS = frozenset({
+        "system",
+        "apps",
+        "config"
+    })
+
+    RESERVED_DIRS = frozenset({
+        "trash"
+    })
+
     def __init__(
         self,
         root: str | Path,
@@ -432,3 +442,13 @@ class FoxSecurityBoundary:
             validated,
             allow_new=True,
         )
+
+    def _get_area(self, path: str |Path):
+        resolved = Path(path).resolve(strict = False)
+
+        relative = resolved.relative_to(self.root)
+
+        if not relative.parts:
+            return "root"
+
+        return relative.parts[0]
