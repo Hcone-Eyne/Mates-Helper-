@@ -1,43 +1,51 @@
 # Fox Security Boundary
+#
 # Deterministic application-level security layer for Fox filesystem operations.
 # LLMs are NEVER the security authority.
+#
+# IMPORTANT:
+# This is an application-level boundary, not an OS sandbox.
+# A compromised process with unrestricted host permissions could still bypass it.
+# Strong process isolation belongs to a later OS/container/VM phase.
 
 from pathlib import Path
-from typing import Literal
 
 
 class FoxSecurityError(PermissionError):
     """Raised when an operation violates Fox security policy."""
-    pass
 
 
 class InvalidActionError(FoxSecurityError):
     """Raised when an unknown or disallowed action is requested."""
-    pass
 
 
 class PathEscapeError(FoxSecurityError):
     """Raised when a path attempts to escape the Fox root."""
-    pass
 
 
 class SymlinkEscapeError(FoxSecurityError):
     """Raised when a symlink resolves outside the Fox root."""
-    pass
+
+
+class PrivilegedActionError(FoxSecurityError):
+    """Raised when a privileged action lacks explicit security authorization."""
 
 
 class FoxSecurityBoundary:
     """
     Deterministic security boundary for Fox filesystem operations.
 
-    The Fox root is established once at construction and cannot be changed.
-    All paths are validated against this root using proper path semantics.
+    LLMs may REQUEST actions.
+    They do NOT authorize actions.
 
-    LLMs (Julie, Annie, Selina, Gwen, Ollama) are NEVER the security authority.
-    This boundary is the single choke point for all filesystem access.
+    The boundary owns:
+    - root containment
+    - symlink validation
+    - action allowlisting
+    - privileged-action authorization
+    - trash containment
     """
 
-    # Supported actions - centralized action policy
     SUPPORTED_ACTIONS = frozenset({
         "list_directory",
         "organise_folder",
@@ -51,7 +59,6 @@ class FoxSecurityBoundary:
         "empty_trash",
     })
 
-    # Action aliases for natural-language compatibility
     ACTION_ALIASES = {
         "move": "move_file",
         "copy": "copy_file",
@@ -71,167 +78,211 @@ class FoxSecurityBoundary:
         "look": "search_files",
     }
 
-    # Trash directory name
+    PRIVILEGED_ACTIONS = frozenset({
+        "empty_trash",
+    })
+
     TRASH_DIR = ".fox_trash"
 
-    def __init__(self, root: str | Path, create: bool = True):
-        """
-        Establish the Fox security root.
+    def __init__(
+        self,
+        root: str | Path,
+        create: bool = True,
+    ):
+        root_path = Path(root).expanduser()
 
-        The root is resolved once and cannot be changed after construction.
-        This prevents operations from bypassing the boundary by providing
-        a different target directory per operation.
+        # Resolve the root itself once.
+        root_path = root_path.resolve()
 
-        Args:
-            root: The root directory path
-            create: If True, create the root directory if it doesn't exist (default: True)
-        """
-        self._root = Path(root).expanduser().resolve()
+        if not root_path.exists():
+            if not create:
+                raise ValueError(
+                    f"Fox root does not exist: {root_path}"
+                )
+            root_path.mkdir(parents=True, exist_ok=True)
 
-        if not self._root.exists():
-            if create:
-                self._root.mkdir(parents=True, exist_ok=True)
-            else:
-                raise ValueError(f"Fox root does not exist: {self._root}")
-        elif not self._root.is_dir():
-            raise ValueError(f"Fox root is not a directory: {self._root}")
+        if not root_path.is_dir():
+            raise ValueError(
+                f"Fox root is not a directory: {root_path}"
+            )
 
-        # Create trash directory
-        self._trash_dir = self._root / self.TRASH_DIR
-        self._trash_dir.mkdir(parents=True, exist_ok=True)
+        trash_path = root_path / self.TRASH_DIR
 
-        # Mark root as immutable
-        self._sealed = True
+        if trash_path.exists() and not trash_path.is_dir():
+            raise ValueError(
+                f"Fox trash path is not a directory: {trash_path}"
+            )
+
+        trash_path.mkdir(parents=True, exist_ok=True)
+
+        object.__setattr__(self, "_root", root_path)
+        object.__setattr__(self, "_trash_dir", trash_path)
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value) -> None:
+        if getattr(self, "_sealed", False):
+            if name in {"_root", "_trash_dir", "_sealed"}:
+                raise FoxSecurityError(
+                    "FoxSecurityBoundary root is immutable after construction"
+                )
+
+        super().__setattr__(name, value)
 
     @property
     def root(self) -> Path:
-        """Return the immutable Fox security root."""
         return self._root
 
     @property
     def trash_dir(self) -> Path:
-        """Return the trash directory path."""
         return self._trash_dir
-
-    def __setattr__(self, name: str, value) -> None:
-        """Prevent modification of sealed attributes after initialization."""
-        if getattr(self, "_sealed", False) and name in ("_root", "_trash_dir", "_sealed"):
-            raise FoxSecurityError("FoxSecurityBoundary root is immutable after construction")
-        super().__setattr__(name, value)
 
     # ------------------------------------------------------------------
     # Path validation
     # ------------------------------------------------------------------
 
-    def validate_path(self, path: str | Path, must_exist: bool = False) -> Path:
+    def validate_path(
+        self,
+        path: str | Path,
+        must_exist: bool = False,
+    ) -> Path:
         """
-        Validate and resolve a path against the Fox security root.
+        Validate a path against the Fox root.
 
-        Args:
-            path: The path to validate (relative to Fox root or absolute)
-            must_exist: If True, the path must exist on disk
+        Relative paths are interpreted relative to Fox root.
 
-        Returns:
-            The resolved absolute path inside the Fox root
+        Existing path components are resolved to detect symlink escapes.
 
-        Raises:
-            PathEscapeError: If the path resolves outside the Fox root
-            SymlinkEscapeError: If a symlink resolves outside the Fox root
-            FileNotFoundError: If must_exist=True and path doesn't exist
+        Nonexistent final components are allowed when must_exist=False,
+        provided their existing parent chain remains inside the root.
         """
+
+        if path is None:
+            raise PathEscapeError("Path cannot be None")
+
         candidate = Path(path).expanduser()
 
-        # If path is relative, treat it as relative to Fox root
         if not candidate.is_absolute():
-            candidate = (self._root / candidate).resolve()
+            candidate = self._root / candidate
 
-        # Handle nonexistent paths - resolve parent directories
+        # Validate component chain first to catch symlink escapes before
+        # checking root containment of the resolved path.
+        self._validate_component_chain(candidate)
+
+        # Resolve existing components while allowing a nonexistent leaf.
         try:
-            resolved = candidate.resolve()
-        except FileNotFoundError:
-            # For nonexistent paths, resolve as much as possible
-            # Find the nearest existing ancestor
-            parts = candidate.parts
-            for i in range(len(parts), 0, -1):
-                test_path = Path(*parts[:i])
-                if test_path.exists():
-                    resolved = test_path.resolve()
-                    # Append remaining parts
-                    for part in parts[i:]:
-                        resolved = resolved / part
-                    break
-            else:
-                # No existing ancestor, use the root as base
-                resolved = candidate
+            resolved = candidate.resolve(strict=False)
+        except OSError as exc:
+            raise PathEscapeError(
+                f"Unable to resolve path safely: {path}"
+            ) from exc
 
-        # Check if path escapes the Fox root
         if not self._is_inside_root(resolved):
             raise PathEscapeError(
                 f"Path escapes Fox security root: {path} -> {resolved}"
             )
 
-        # Check for symlink escape
-        if candidate.exists() and candidate.is_symlink():
-            try:
-                real_resolved = candidate.resolve(strict=True)
-                if not self._is_inside_root(real_resolved):
-                    raise SymlinkEscapeError(
-                        f"Symlink escapes Fox security root: {path} -> {real_resolved}"
-                    )
-            except (OSError, FileNotFoundError):
-                # Broken symlink or other issue - treat as escape attempt
-                raise SymlinkEscapeError(f"Symlink resolution failed: {path}")
-
-        if must_exist and not resolved.exists():
-            raise FileNotFoundError(f"Path does not exist: {resolved}")
+        if must_exist and not candidate.exists():
+            raise FileNotFoundError(
+                f"Path does not exist: {candidate}"
+            )
 
         return resolved
 
-    def _is_inside_root(self, path: Path) -> bool:
-        """Check if a resolved path is inside the Fox root using path semantics."""
+    def _validate_component_chain(self, candidate: Path) -> None:
+        """
+        Validate the complete existing component chain.
+
+        This catches:
+        - direct symlink escapes
+        - nested symlink escapes
+        - symlinked parent directories
+        - broken symlinks
+        """
+
+        # First, check if the path (without resolving symlinks) is inside root.
+        # This allows symlinks inside the root to be validated individually.
         try:
-            # Path is inside root if root is the path itself or an ancestor
-            return path == self._root or self._root in path.parents
-        except (ValueError, OSError):
+            relative = candidate.relative_to(self._root)
+        except ValueError:
+            # If the unresolved path fails, try with resolved paths
+            # (handles macOS /tmp -> /private/tmp symlink).
+            try:
+                candidate_resolved = candidate.resolve(strict=False)
+            except OSError:
+                candidate_resolved = candidate
+            try:
+                relative = candidate_resolved.relative_to(self._root)
+            except ValueError as exc:
+                raise PathEscapeError(
+                    f"Path is outside Fox root: {candidate}"
+                ) from exc
+
+        # If candidate is the root itself, there are no components to validate.
+        if not relative.parts:
+            return
+
+        current = self._root
+
+        for component in relative.parts:
+            current = current / component
+
+            if current.is_symlink():
+                try:
+                    resolved = current.resolve(strict=True)
+                except (OSError, FileNotFoundError) as exc:
+                    raise SymlinkEscapeError(
+                        f"Unable to safely resolve symlink: {current}"
+                    ) from exc
+
+                if not self._is_inside_root(resolved):
+                    raise SymlinkEscapeError(
+                        f"Symlink escapes Fox root: "
+                        f"{current} -> {resolved}"
+                    )
+
+    def _is_inside_root(self, path: Path) -> bool:
+        try:
+            path.relative_to(self._root)
+            return True
+        except ValueError:
             return False
 
     def validate_source_path(self, path: str | Path) -> Path:
-        """Validate a source path (must exist)."""
         return self.validate_path(path, must_exist=True)
 
-    def validate_destination_path(self, path: str | Path, allow_new: bool = True) -> Path:
-        """
-        Validate a destination path.
-
-        Args:
-            path: The destination path
-            allow_new: If True, allow paths that don't exist yet (for creation)
-
-        Returns:
-            The resolved destination path
-        """
-        return self.validate_path(path, must_exist=not allow_new)
+    def validate_destination_path(
+        self,
+        path: str | Path,
+        allow_new: bool = True,
+    ) -> Path:
+        return self.validate_path(
+            path,
+            must_exist=not allow_new,
+        )
 
     def validate_new_name(self, name: str) -> str:
-        """
-        Validate a new filename (not a path).
+        if not isinstance(name, str):
+            raise FoxSecurityError("Filename must be a string")
 
-        Rejects:
-        - Path traversal attempts (.., /, \\)
-        - Absolute paths
-        - Empty names
-        """
         name = name.strip()
+
         if not name:
             raise FoxSecurityError("Filename cannot be empty")
 
-        # Reject path components
-        if any(part in name for part in ("..", "/", "\\")):
-            raise FoxSecurityError(f"Invalid filename (contains path components): {name}")
+        if name in {".", ".."}:
+            raise FoxSecurityError(
+                "Invalid filename"
+            )
 
-        # Reject absolute paths
+        if "/" in name or "\\" in name:
+            raise FoxSecurityError(
+                f"Invalid filename: {name}"
+            )
+
         if Path(name).is_absolute():
-            raise FoxSecurityError(f"Filename cannot be an absolute path: {name}")
+            raise FoxSecurityError(
+                f"Filename cannot be an absolute path: {name}"
+            )
 
         return name
 
@@ -240,47 +291,144 @@ class FoxSecurityBoundary:
     # ------------------------------------------------------------------
 
     def resolve_action(self, action: str) -> str:
-        """
-        Resolve an action name, handling aliases.
+        if not isinstance(action, str):
+            raise InvalidActionError(
+                "Action must be a string"
+            )
 
-        Returns the canonical action name.
-        Raises InvalidActionError if action is unknown.
-        """
-        action = action.strip().lower().replace(" ", "_")
+        normalized = (
+            action.strip()
+            .lower()
+            .replace(" ", "_")
+        )
 
-        # Check aliases first
-        if action in self.ACTION_ALIASES:
-            return self.ACTION_ALIASES[action]
+        if normalized in self.ACTION_ALIASES:
+            return self.ACTION_ALIASES[normalized]
 
-        # Check if it's a known action
-        if action in self.SUPPORTED_ACTIONS:
-            return action
+        if normalized in self.SUPPORTED_ACTIONS:
+            return normalized
 
         raise InvalidActionError(
-            f"Unknown action: '{action}'. Supported: {sorted(self.SUPPORTED_ACTIONS)}"
+            f"Unknown action: '{normalized}'. "
+            f"Supported: {sorted(self.SUPPORTED_ACTIONS)}"
         )
 
     def validate_action(self, action: str) -> str:
-        """Validate and return canonical action name."""
         return self.resolve_action(action)
 
+    # ------------------------------------------------------------------
+    # Privileged actions
+    # ------------------------------------------------------------------
+
+    def authorize_privileged_action(
+        self,
+        action: str,
+        *,
+        authorization_token: object | None = None,
+    ) -> str:
+        """
+        Authorize a privileged action.
+
+        IMPORTANT:
+        A boolean such as confirm=True is deliberately NOT accepted.
+
+        The token must be created by trusted application code, not by
+        LLM-generated action arguments.
+        """
+
+        canonical = self.validate_action(action)
+
+        if canonical not in self.PRIVILEGED_ACTIONS:
+            return canonical
+
+        if authorization_token is not self:
+            raise PrivilegedActionError(
+                f"Privileged action requires trusted authorization: "
+                f"{canonical}"
+            )
+
+        return canonical
+
+    # ------------------------------------------------------------------
+    # Trash policy
+    # ------------------------------------------------------------------
+
     def is_trash_path(self, path: Path) -> bool:
-        """Check if a path is inside the trash directory."""
         try:
-            resolved = path.resolve()
-            return self._trash_dir in resolved.parents or resolved == self._trash_dir
-        except (ValueError, OSError):
+            resolved = Path(path).resolve(strict=False)
+        except OSError:
             return False
 
+        try:
+            resolved.relative_to(self._trash_dir)
+            return True
+        except ValueError:
+            return False
+
+    def validate_trash_path(
+        self,
+        path: str | Path,
+        *,
+        must_exist: bool = False,
+    ) -> Path:
+        """
+        Validate that a path is inside Fox trash.
+        """
+
+        resolved = self.validate_path(
+            path,
+            must_exist=must_exist,
+        )
+
+        if not self.is_trash_path(resolved):
+            raise FoxSecurityError(
+                f"Path is not inside Fox trash: {path}"
+            )
+
+        return resolved
+
+    # ------------------------------------------------------------------
+    # Utility operations
+    # ------------------------------------------------------------------
+
     def get_relative_path(self, path: Path) -> Path:
-        """Get path relative to Fox root."""
-        resolved = path.resolve()
-        if not self._is_inside_root(resolved):
-            raise PathEscapeError(f"Path not inside Fox root: {path}")
-        return resolved.relative_to(self._root)
+        resolved = self.validate_path(path)
+
+        try:
+            return resolved.relative_to(self._root)
+        except ValueError as exc:
+            raise PathEscapeError(
+                f"Path not inside Fox root: {path}"
+            ) from exc
 
     def ensure_parent_dirs(self, path: Path) -> Path:
-        """Ensure parent directories exist for a path inside Fox root."""
-        validated = self.validate_path(path, must_exist=False)
-        validated.parent.mkdir(parents=True, exist_ok=True)
-        return validated
+        """
+        Validate a path and create its parent directories.
+
+        This remains application-level protection. It does not eliminate
+        filesystem TOCTOU races against another hostile process.
+        """
+
+        validated = self.validate_destination_path(
+            path,
+            allow_new=True,
+        )
+
+        parent = validated.parent
+
+        # Validate the parent independently before creation.
+        self.validate_destination_path(
+            parent,
+            allow_new=True,
+        )
+
+        parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # Revalidate after creation.
+        return self.validate_destination_path(
+            validated,
+            allow_new=True,
+        )

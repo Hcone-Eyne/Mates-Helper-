@@ -5,6 +5,7 @@ from .boundary import (
     FoxSecurityError,
     InvalidActionError,
     PathEscapeError,
+    PrivilegedActionError,
     SymlinkEscapeError,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "FoxSecurityError",
     "InvalidActionError",
     "PathEscapeError",
+    "PrivilegedActionError",
     "SymlinkEscapeError",
 ]
