@@ -16,4 +16,4 @@ def chat(prompt, api_key, base_url, model):
     }
     resp = requests.post(url, headers = headers, json = payload, timeout = 60)
     resp.raise_for_status()
-    return resp.json()["choice"][0]["message"]["content"]
+    return resp.json()["choices"][0]["message"]["content"]

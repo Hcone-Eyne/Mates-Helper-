@@ -193,7 +193,7 @@ def review_edit(data):
 
             # check rows for matches
             row = matches.index[0]
-            print("\n[Fox]:Periods for {day_input}: ")
+            print(f"\n[Fox]:Periods for {day_input}: ")
             # this iterate over columns
             for column in data.columns[1:]:
                 # prints the founded data + that data.loc will look through each row and column and prints the required found value!
@@ -212,8 +212,6 @@ def review_edit(data):
         return data
     except Exception as e:
         print(f"[Fox]: Something went wrong — {e}")
-        pass
-    except ValueError:
         pass
 
 # adding function again and again to fix the formant (long format table to match the csv)

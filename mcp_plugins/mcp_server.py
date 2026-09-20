@@ -22,14 +22,14 @@ def _df_to_text(df: pd.DataFrame) -> str:
 # Making Schedule tools to MCP
 @mcp.tool() # a special way to call the plugin
 # this function returns detailes about the stored schedule!
-def schedule_ask(input:str) -> str:
+def schedule_ask(query:str) -> str:
     """Search or ask questions about the stored schedule."""
     # ask fox about schedule it gives
     # load the schedule
     data = load_schedule()
 
     # fetching result in DataFrame Format
-    result = query_handler(input, data)
+    result = query_handler(query, data)
 
     # this conditions make sure that output is returned as string..
     if isinstance(result, pd.DataFrame):

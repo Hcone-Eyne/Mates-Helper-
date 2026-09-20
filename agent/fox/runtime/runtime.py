@@ -16,6 +16,7 @@ from agent.gwen.gwen import Gwen, OllamaCriticBackend
 from agent.ollama.client import OllamaClient
 from agent.fox.runtime.executor import FileActionExecutor
 from agent.fox.security import FoxSecurityBoundary
+from agent.fox.Fox_Space import ensure_fox_space
 
 
 console = Console()
@@ -216,12 +217,14 @@ def build_runtime(
     julie = Julie(OllamaReasoningBackend(client))
     annie = Annie(OllamaAnnieBackend(client))
 
+    fox_space = ensure_fox_space()
     if target_dir is not None:
-        # Create security boundary with the target directory as Fox root
-        boundary = FoxSecurityBoundary(target_dir)
-        executor = FileActionExecutor(boundary)
+        executor_root = Path(target_dir)
     else:
-        executor = _UnavailableExecutor()
+        executor_root = fox_space
+
+    boundary = FoxSecurityBoundary(executor_root)
+    executor = FileActionExecutor(boundary)
 
     selina = Selina(executor)
     gwen = Gwen(OllamaCriticBackend(client))

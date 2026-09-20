@@ -15,7 +15,6 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 TOOLS = OrderedDict()       # name -> {"description": ..., "params": [...], "fn": callable}
-TOOL_PROMPT_PARTS = []      # built once, used in system prompt
 
 
 def _register(name, description, params, fn):
@@ -31,9 +30,6 @@ def _register(name, description, params, fn):
         "params": params,
         "fn": fn,
     }
-    param_str = ", ".join(p["name"] for p in params) if params else "(no args)"
-    part = f"- {name}{param_str}: {description}"
-    TOOL_PROMPT_PARTS.append(part)
 
 
 def dispatch(tool_name, **kwargs):
@@ -49,7 +45,7 @@ def dispatch(tool_name, **kwargs):
 
 def tool_prompt_block():
     """Return the tool list block to embed in the system prompt."""
-    if not TOOL_PROMPT_PARTS:
+    if not TOOLS:
         return ""
     lines = [
         "You have access to these tools. To use one, write EXACTLY this format on its own line:",

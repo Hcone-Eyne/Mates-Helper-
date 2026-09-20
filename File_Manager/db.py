@@ -153,7 +153,7 @@ def get_file(path):
     cur = conn.cursor()
 
     # this is a sql cmd used to select a paticular path and find path
-    conn.execute(
+    cur.execute(
         "SELECT * FROM files WHERE path = ?",
         (str(Path(path).resolve()),)
     )

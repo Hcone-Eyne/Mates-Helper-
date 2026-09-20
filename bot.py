@@ -30,7 +30,7 @@ def query_handler(keyword, data):
             return result
 
     # query : If user asked about book needed question
-    for book in keyword:
+    if "book" in keyword:
         # fetching about toda status via fetchstatus_today()
         today = fetchstatus_today()
         result = data[data["day"].str.lower() == today.lower()]

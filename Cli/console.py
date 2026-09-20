@@ -100,14 +100,14 @@ def run_scheduler():
             # adding this to prevent infinte loop!
             elif choice == "0":
                 break
-        except Exception as e:
-            console.print(f"[Fox]: Error Occured: {e}")
-            input("\nPress Enter to continue...")
         except FileNotFoundError:
             console.print(f"[Fox]: Couldn't find a file at '{image_path}' - Check the path and try again....")
             input("\nPress Enter to continue...")
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
+            input("\nPress Enter to continue...")
+        except Exception as e:
+            console.print(f"[Fox]: Error Occured: {e}")
             input("\nPress Enter to continue...")
 
 def run_finance_bot():
