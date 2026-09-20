@@ -15,6 +15,7 @@ from agent.selina.selina import Selina, SelinaResult
 from agent.gwen.gwen import Gwen, OllamaCriticBackend
 from agent.ollama.client import OllamaClient
 from agent.fox.runtime.executor import FileActionExecutor
+from agent.fox.security import FoxSecurityBoundary
 
 
 console = Console()
@@ -52,7 +53,7 @@ class Runtime:
 
     Flow:
 
-        User 
+        User
           ↓
         Julie
           ↓
@@ -196,7 +197,11 @@ class Runtime:
         )
 
 
-def build_runtime(target_dir: str | Path | None = None, model: str | None = None, think: bool = False) -> Runtime:
+def build_runtime(
+    target_dir: str | Path | None = None,
+    model: str | None = None,
+    think: bool = False
+) -> Runtime:
     """Create a Runtime wired to a local Ollama server."""
     try:
         client = OllamaClient(
@@ -212,7 +217,9 @@ def build_runtime(target_dir: str | Path | None = None, model: str | None = None
     annie = Annie(OllamaAnnieBackend(client))
 
     if target_dir is not None:
-        executor = FileActionExecutor(Path(target_dir))
+        # Create security boundary with the target directory as Fox root
+        boundary = FoxSecurityBoundary(target_dir)
+        executor = FileActionExecutor(boundary)
     else:
         executor = _UnavailableExecutor()
 
@@ -225,6 +232,7 @@ def build_runtime(target_dir: str | Path | None = None, model: str | None = None
         selina=selina,
         gwen=gwen
     )
+
 
 def validate_target_dir(raw_input: str) -> Path | None:
     """Validate and resolve a user-supplied target directory path.
@@ -246,4 +254,3 @@ def validate_target_dir(raw_input: str) -> Path | None:
         raise ValueError(f"Path is not a directory: {path}")
 
     return path
-

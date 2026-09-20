@@ -13,6 +13,7 @@ from brain.tools import TOOLS, dispatcher
 # additional imports for provider option so user can use it
 from agent.ollama.ollama_agent import FoxAgent
 from agent.ollama.ollama_agent import OllamaFoxAgent
+from agent.fox.runtime.runtime import build_runtime
 
 # status of the provider
 CURRENT_PROVIDER = "ollama"
@@ -109,7 +110,8 @@ def run_task(task_description: str, provider: str | None = None):
         return local_cmd
 
     if provider_name == "ollama":
-        agent = OllamaFoxAgent(model = get_model(), think = get_think())
+        runtime = build_runtime(model=get_model(), think=get_think(), target_dir=".")
+        agent = FoxAgent(runtime=runtime)
         return agent.ask(task_description)
 
     if provider_name == "anthropic":
