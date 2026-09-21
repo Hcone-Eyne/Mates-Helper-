@@ -3,8 +3,12 @@
 from pathlib import Path
 
 
-class FoxPolicyError(PermissionError):
-    """Raised when a filesystem operation violates the Fox policy."""
+class FoxSecurityError(PermissionError):
+    """Raised when an operation violates Fox security policy."""
+
+
+class FoxPolicyError(FoxSecurityError):
+    """Raised when a filesystem operation violates the Fox directory policy."""
 
 
 class FoxDirectoryPolicy:
@@ -70,6 +74,10 @@ class FoxDirectoryPolicy:
         if not relative.parts:
             raise FoxPolicyError("Fox Space root is not readable")
 
+        # Allow root-level files for executor compatibility.
+        if len(relative.parts) == 1:
+            return self._root / relative
+
         area = relative.parts[0]
 
         if area in self.RESERVED_DIRS:
@@ -78,13 +86,19 @@ class FoxDirectoryPolicy:
         if area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
             raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
 
-        return Path(path).expanduser().resolve(strict=False)
+        return self._root / relative
 
     def validate_write(self, path: str | Path) -> Path:
         relative = self._relative(path)
 
         if not relative.parts:
             raise FoxPolicyError("Fox Space root is not writable")
+
+        # Allow root-level files (but not directories) for executor compatibility.
+        if len(relative.parts) == 1:
+            # Single component under root - allow as file operation.
+            # Root-level directories (other than managed) are rejected by area().
+            return self._root / relative
 
         area = relative.parts[0]
 
@@ -94,9 +108,16 @@ class FoxDirectoryPolicy:
         if area not in self.WRITEABLE_DIRS:
             raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
 
-        return Path(path).expanduser().resolve(strict=False)
+        return self._root / relative
 
     def validate_create(self, path: str | Path) -> Path:
+        # Creating directories at root level is not allowed.
+        # Only managed subdirectories (workspace, storage, etc.) may be created.
+        relative = self._relative(path)
+        if not relative.parts:
+            raise FoxPolicyError("Fox Space root is not writable")
+        if len(relative.parts) == 1:
+            raise FoxPolicyError("Arbitrary root-level directories are not allowed")
         return self.validate_write(path)
 
     def validate_delete(self, path: str | Path) -> Path:
@@ -116,5 +137,22 @@ class FoxDirectoryPolicy:
 
         return validated
 
-    def validate_restore_destination(self, path: str | Path) -> Path:
+    def validate_restore_destination(self, path: str | Path, allow_new: bool = True) -> Path:
         return self.validate_write(path)
+
+    def validate_move_destination(self, path: str | Path) -> Path:
+        """Validate destination for move operations - both read and write allowed."""
+        relative = self._relative(path)
+
+        if not relative.parts:
+            raise FoxPolicyError("Fox Space root cannot be a move destination")
+
+        area = relative.parts[0]
+
+        if area in self.RESERVED_DIRS:
+            raise FoxPolicyError("Fox trash is controlled internally")
+
+        if area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
+            raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
+
+        return self._root / relative

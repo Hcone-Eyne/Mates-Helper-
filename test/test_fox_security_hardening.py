@@ -22,12 +22,13 @@ def make_executor(tmp_path: Path):
 def test_empty_trash_rejects_confirm_boolean(tmp_path):
     root, boundary, executor = make_executor(tmp_path)
 
-    file_path = root / "hello.txt"
+    file_path = root / "workspace" / "hello.txt"
+    file_path.parent.mkdir()
     file_path.write_text("hello")
 
     executor.execute(
         "delete_file",
-        {"path": "hello.txt"},
+        {"path": "workspace/hello.txt"},
     )
 
     with pytest.raises(PrivilegedActionError):
@@ -40,6 +41,15 @@ def test_empty_trash_rejects_confirm_boolean(tmp_path):
 def test_empty_trash_rejects_missing_authorization(tmp_path):
     root, boundary, executor = make_executor(tmp_path)
 
+    file_path = root / "workspace" / "hello.txt"
+    file_path.parent.mkdir()
+    file_path.write_text("hello")
+
+    executor.execute(
+        "delete_file",
+        {"path": "workspace/hello.txt"},
+    )
+
     with pytest.raises(PrivilegedActionError):
         executor.execute(
             "empty_trash",
@@ -50,12 +60,13 @@ def test_empty_trash_rejects_missing_authorization(tmp_path):
 def test_empty_trash_accepts_boundary_authorization(tmp_path):
     root, boundary, executor = make_executor(tmp_path)
 
-    file_path = root / "hello.txt"
+    file_path = root / "workspace" / "hello.txt"
+    file_path.parent.mkdir()
     file_path.write_text("hello")
 
     executor.execute(
         "delete_file",
-        {"path": "hello.txt"},
+        {"path": "workspace/hello.txt"},
     )
 
     result = executor.execute(
@@ -163,12 +174,13 @@ def test_broken_symlink_rejected(tmp_path):
 def test_delete_trash_destination_stays_inside_root(tmp_path):
     root, boundary, executor = make_executor(tmp_path)
 
-    file_path = root / "hello.txt"
+    file_path = root / "workspace" / "hello.txt"
+    file_path.parent.mkdir()
     file_path.write_text("hello")
 
     result = executor.execute(
         "delete_file",
-        {"path": "hello.txt"},
+        {"path": "workspace/hello.txt"},
     )
 
     trash_path = root / result["trash_path"]
@@ -181,19 +193,19 @@ def test_delete_trash_destination_stays_inside_root(tmp_path):
 def test_restore_default_destination_is_inside_root(tmp_path):
     root, boundary, executor = make_executor(tmp_path)
 
-    original = root / "folder" / "hello.txt"
+    original = root / "workspace" / "hello.txt"
     original.parent.mkdir()
     original.write_text("hello")
 
     executor.execute(
         "delete_file",
-        {"path": "folder/hello.txt"},
+        {"path": "workspace/hello.txt"},
     )
 
     result = executor.execute(
         "restore_file",
         {
-            "path": ".fox_trash/folder/hello.txt"
+            "path": ".fox_trash/workspace/hello.txt"
         },
     )
 
@@ -277,7 +289,7 @@ def test_get_area_workspace(tmp_path):
 
     path = boundary.root / "workspace" / "test.txt"
 
-    assert boundary._get_area(path) == "workspace"
+    assert boundary.get_area(path) == "workspace"
 
 
 def test_get_area_system(tmp_path):
@@ -285,6 +297,120 @@ def test_get_area_system(tmp_path):
 
     path = boundary.root / "system" / "runtime.json"
 
-    assert boundary._get_area(path) == "system"
+    assert boundary.get_area(path) == "system"
+
+
+# ------------------------------------------------------------------
+# Regression tests for root-level file operations (executor compatibility)
+# ------------------------------------------------------------------
+
+def test_root_level_file_write(tmp_path):
+    """Root-level files can be written for executor compatibility."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    # validate_write should succeed for root-level file
+    file_path = root / "hello.txt"
+    file_path.write_text("hello")
+    validated = boundary.validate_write("hello.txt")
+    assert validated == file_path
+
+
+def test_root_level_file_read(tmp_path):
+    """Root-level files can be read."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    file_path = root / "hello.txt"
+    file_path.write_text("hello")
+
+    validated = boundary.validate_read("hello.txt")
+    assert validated == file_path
+
+
+def test_root_level_file_delete(tmp_path):
+    """Root-level files can be deleted (regression for delete_file('hello.txt'))."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    file_path = root / "hello.txt"
+    file_path.write_text("hello")
+
+    # This was the failing case: delete_file("hello.txt")
+    validated = boundary.validate_delete("hello.txt")
+    assert validated == file_path
+
+
+def test_root_level_file_copy(tmp_path):
+    """Root-level files can be copied."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    file_path = root / "hello.txt"
+    file_path.write_text("hello")
+
+    # copy_file uses validate_read for source, validate_write for destination
+    src = boundary.validate_read("hello.txt")
+    dst = boundary.validate_write("hello_copy.txt")
+    assert src == file_path
+    assert dst == root / "hello_copy.txt"
+
+
+def test_root_level_file_rename(tmp_path):
+    """Root-level files can be renamed."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    file_path = root / "hello.txt"
+    file_path.write_text("hello")
+
+    # rename_file uses validate_write for both source and destination
+    src = boundary.validate_write("hello.txt")
+    dst = boundary.validate_write("hello_renamed.txt")
+    assert src == file_path
+    assert dst == root / "hello_renamed.txt"
+
+
+def test_root_level_file_restore(tmp_path):
+    """Root-level files can be restored from trash."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    file_path = root / "hello.txt"
+    file_path.write_text("hello")
+
+    executor.execute("delete_file", {"path": "hello.txt"})
+
+    # restore_file uses validate_restore_destination which calls validate_write
+    restored_dst = boundary.validate_restore_destination("hello.txt")
+    assert restored_dst == file_path
+
+
+def test_root_level_directory_create_rejected(tmp_path):
+    """Arbitrary root-level directories cannot be created."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    with pytest.raises(FoxSecurityError, match="Arbitrary root-level directories are not allowed"):
+        boundary.validate_create("new_dir")
+
+
+def test_root_level_directory_write_allowed_for_files(tmp_path):
+    """validate_write allows root-level paths (for file operations like copy/rename/delete)."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    # validate_write allows root-level paths for file operations
+    # We can't distinguish file vs directory for non-existent paths
+    validated = boundary.validate_write("some_file.txt")
+    assert validated == root / "some_file.txt"
+
+
+def test_root_itself_not_writable(tmp_path):
+    """The Fox Space root itself remains non-writable."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    with pytest.raises(FoxSecurityError, match="root is not writable"):
+        boundary.validate_write("")
+
+
+def test_root_itself_not_readable(tmp_path):
+    """The Fox Space root itself remains non-readable."""
+    root, boundary, executor = make_executor(tmp_path)
+
+    with pytest.raises(FoxSecurityError, match="root is not readable"):
+        boundary.validate_read("")
 
 

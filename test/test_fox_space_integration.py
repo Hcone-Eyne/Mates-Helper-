@@ -167,15 +167,15 @@ class TestFoxSpaceIntegration:
             executor = FileActionExecutor(boundary)
 
             # Create, delete, restore
-            test_file = custom_root / "folder" / "hello.txt"
+            test_file = custom_root / "workspace" / "hello.txt"
             test_file.parent.mkdir(parents=True, exist_ok=True)
             test_file.write_text("hello")
 
-            executor.execute("delete_file", {"path": "folder/hello.txt"})
+            executor.execute("delete_file", {"path": "workspace/hello.txt"})
 
             result = executor.execute(
                 "restore_file",
-                {"path": ".fox_trash/folder/hello.txt"}
+                {"path": ".fox_trash/workspace/hello.txt"}
             )
 
             restored = custom_root / result["restored_to"]

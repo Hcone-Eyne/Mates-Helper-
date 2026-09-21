@@ -129,6 +129,12 @@ class FileActionExecutor:
             allow_new=allow_new,
         )
 
+    def _validate_read(self, path: str | Path) -> Path:
+        return self._boundary.validate_read(path)
+
+    def _validate_write(self, path: str | Path) -> Path:
+        return self._boundary.validate_write(path)
+
     def _validate_new_name(self, name: str) -> str:
         return self._boundary.validate_new_name(name)
 
@@ -345,7 +351,7 @@ class FileActionExecutor:
                 "'source' and 'destination'"
             )
 
-        src_path = self._validate_source(source)
+        src_path = self._boundary.validate_move_source(source)
 
         if not src_path.is_file():
             raise FoxSecurityError(
@@ -358,10 +364,7 @@ class FileActionExecutor:
                 "use restore_file"
             )
 
-        dest_path = self._validate_destination(
-            destination,
-            allow_new=True,
-        )
+        dest_path = self._boundary.validate_move_destination(destination)
 
         if dest_path.exists() and dest_path.is_dir():
             dest_path = dest_path / src_path.name
@@ -371,10 +374,7 @@ class FileActionExecutor:
                 dest_path
             )
 
-        self._validate_destination(
-            dest_path,
-            allow_new=True,
-        )
+        self._boundary.validate_write(dest_path)
 
         self._ensure_parent_dirs(dest_path)
 
@@ -415,7 +415,7 @@ class FileActionExecutor:
                 "'source' and 'destination'"
             )
 
-        src_path = self._validate_source(source)
+        src_path = self._validate_read(source)
 
         if not src_path.is_file():
             raise FoxSecurityError(
@@ -428,10 +428,7 @@ class FileActionExecutor:
                 "use restore_file"
             )
 
-        dest_path = self._validate_destination(
-            destination,
-            allow_new=True,
-        )
+        dest_path = self._validate_write(destination)
 
         if dest_path.exists() and dest_path.is_dir():
             dest_path = dest_path / src_path.name
@@ -441,10 +438,7 @@ class FileActionExecutor:
                 dest_path
             )
 
-        self._validate_destination(
-            dest_path,
-            allow_new=True,
-        )
+        self._validate_write(dest_path)
 
         self._ensure_parent_dirs(dest_path)
 
@@ -482,7 +476,7 @@ class FileActionExecutor:
                 "'path' and 'new_name'"
             )
 
-        src_path = self._validate_source(path)
+        src_path = self._boundary.validate_rename_source(path)
 
         if not src_path.is_file():
             raise FoxSecurityError(
@@ -507,10 +501,7 @@ class FileActionExecutor:
             dest_path
         )
 
-        self._validate_destination(
-            dest_path,
-            allow_new=True,
-        )
+        self._boundary.validate_rename_destination(dest_path)
 
         src_path.rename(dest_path)
 
@@ -545,10 +536,7 @@ class FileActionExecutor:
                 "create_folder requires 'path'"
             )
 
-        dest_path = self._validate_destination(
-            path,
-            allow_new=True,
-        )
+        dest_path = self._boundary.validate_create(path)
 
         if parents:
             dest_path.mkdir(
@@ -561,10 +549,7 @@ class FileActionExecutor:
             )
 
         # Revalidate after creation.
-        dest_path = self._validate_destination(
-            dest_path,
-            allow_new=True,
-        )
+        self._boundary.validate_write(dest_path)
 
         return {
             "action": "create_folder",
@@ -590,7 +575,7 @@ class FileActionExecutor:
                 "delete_file requires 'path'"
             )
 
-        src_path = self._validate_source(path)
+        src_path = self._boundary.validate_delete(path)
 
         if not src_path.is_file():
             raise FoxSecurityError(
@@ -608,11 +593,8 @@ class FileActionExecutor:
             self._boundary.trash_dir / rel_path
         )
 
-        # Explicitly validate the generated trash path.
-        trash_path = self._validate_destination(
-            trash_path,
-            allow_new=True,
-        )
+        # Explicitly validate the generated trash path using trash-specific validation.
+        self._boundary.validate_trash_write(trash_path)
 
         self._ensure_parent_dirs(
             trash_path
@@ -623,10 +605,7 @@ class FileActionExecutor:
         )
 
         # Revalidate after collision resolution.
-        self._validate_destination(
-            trash_path,
-            allow_new=True,
-        )
+        self._boundary.validate_trash_write(trash_path)
 
         shutil.move(
             str(src_path),
@@ -703,7 +682,7 @@ class FileActionExecutor:
                 continue
 
             try:
-                validated = self._validate_source(path)
+                validated = self._boundary.validate_read(path)
             except FoxSecurityError:
                 # Fail closed for unexpected filesystem entries.
                 continue
@@ -766,10 +745,7 @@ class FileActionExecutor:
             )
 
         if destination is not None:
-            dest_path = self._validate_destination(
-                destination,
-                allow_new=True,
-            )
+            dest_path = self._boundary.validate_restore_destination(destination)
 
             if (
                 dest_path.exists()
@@ -787,7 +763,7 @@ class FileActionExecutor:
             dest_path = self._target / rel
 
         # Explicitly validate computed restore destination.
-        dest_path = self._validate_destination(
+        dest_path = self._boundary.validate_restore_destination(
             dest_path,
             allow_new=True,
         )
@@ -797,10 +773,7 @@ class FileActionExecutor:
                 dest_path
             )
 
-        self._validate_destination(
-            dest_path,
-            allow_new=True,
-        )
+        self._boundary.validate_write(dest_path)
 
         self._ensure_parent_dirs(
             dest_path
