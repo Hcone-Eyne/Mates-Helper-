@@ -100,6 +100,84 @@ def _get_anthropic_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
+_ACTION_MARKERS = (
+    "file",
+    "folder",
+    "directory",
+    "schedule",
+    "calendar",
+    "finance",
+    "expense",
+    "statement",
+    "browser",
+    "website",
+    "organize",
+    "organise",
+    "move",
+    "copy",
+    "rename",
+    "delete",
+    "create",
+    "make",
+    "write",
+    "save",
+    "find",
+    "search",
+    "list",
+    "sort",
+    "calculate",
+    "run",
+)
+
+
+def is_conversational_message(message: str) -> bool:
+    """Return whether a message should bypass Fox Club task execution."""
+    normalized = " ".join(message.strip().lower().split())
+    if not normalized:
+        return False
+
+    if any(marker in normalized for marker in _ACTION_MARKERS):
+        return False
+
+    greetings = {
+        "hi",
+        "hello",
+        "hey",
+        "hi fox",
+        "hello fox",
+        "hey fox",
+        "good morning",
+        "good afternoon",
+        "good evening",
+    }
+    if normalized in greetings:
+        return True
+
+    if normalized.startswith(("hi ", "hello ", "hey ")) and not normalized.endswith("?"):
+        return True
+
+    conversational_starts = (
+        "how are you",
+        "who are you",
+        "what can you do",
+        "what is",
+        "what are",
+        "why ",
+        "how ",
+        "can you explain",
+        "tell me about",
+    )
+    return normalized.startswith(conversational_starts) or normalized.endswith("?")
+
+
+def _run_conversation(message: str) -> str:
+    """Answer ordinary conversation without invoking the Fox Club pipeline."""
+    response = FoxAgent(model=get_model(), think=get_think()).ask(message)
+    if response is None:
+        raise RuntimeError("[Fox]: Conversation returned no response.")
+    return str(response)
+
+
 # note: this is the main agent loop — it sends the task, runs tools when needed, and keeps the conversation alive until the model stops asking for tool calls.
 # this function will run the task provided by llm and agent will execute it
 def run_task(task_description: str, provider: str | None = None):
@@ -109,10 +187,23 @@ def run_task(task_description: str, provider: str | None = None):
     if local_cmd is not None:
         return local_cmd
 
+    if is_conversational_message(task_description):
+        return _run_conversation(task_description)
+
     if provider_name == "ollama":
         runtime = build_runtime(model=get_model(), think=get_think(), target_dir=".")
         result = runtime.handle(task_description)
-        return result.final_result.result if hasattr(result.final_result, 'result') else str(result.final_result)
+        response = (
+            result.final_result.result
+            if hasattr(result.final_result, "result")
+            else result.final_result
+        )
+        if response is None:
+            error = getattr(result.final_result, "error", None)
+            if error:
+                return str(error)
+            return "[Fox]: The task completed without a textual response."
+        return str(response)
 
     if provider_name == "anthropic":
         try:

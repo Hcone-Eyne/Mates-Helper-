@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -7,6 +8,21 @@ from dataclasses import dataclass
 
 class KDEConnectError(RuntimeError):
     """Raised when KDE Connect cannot perform an operation."""
+
+
+def _find_kdeconnect_cli() -> str:
+    """Find the kdeconnect-cli binary, checking standard locations."""
+    # First check PATH (e.g., Homebrew install) - return base name for portability
+    if shutil.which("kdeconnect-cli"):
+        return "kdeconnect-cli"
+    # Then check macOS app bundle location - use full path since it's not in PATH
+    app_bundle = "/Applications/KDE Connect.app/Contents/MacOS/kdeconnect-cli"
+    if os.path.isfile(app_bundle) and os.access(app_bundle, os.X_OK):
+        return app_bundle
+    # Fallback to kdeconnect (some installs use this name)
+    if shutil.which("kdeconnect"):
+        return "kdeconnect"
+    return "kdeconnect-cli"
 
 
 @dataclass
@@ -17,7 +33,11 @@ class KDEConnectBridge:
     Fox must NOT import or use this class directly.
     """
 
-    binary: str = "kdeconnect"
+    binary: str = ""
+
+    def __post_init__(self):
+        if not self.binary:
+            self.binary = _find_kdeconnect_cli()
 
     def _run(self, *args: str) -> str:
         if shutil.which(self.binary) is None:

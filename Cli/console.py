@@ -21,6 +21,7 @@ from Finance_bot.operations_finder import operation_finder
 from Memory.memory_storer import memory_lister, memory_catcher
 from brain.orchestrator import (run_task, set_provider, get_provider, set_think, get_think, set_model, get_model,)
 from agent.ollama.discovery import discover_ollama
+from agent.fox.conversation import FoxConversationManager
 
 # creating a console object
 console = Console()
@@ -237,6 +238,12 @@ def run_file_manager():
 def run_fox_agent():
     os.system("clear")
 
+    # Initialize conversation manager
+    conv_manager = FoxConversationManager(
+        model=get_model(),
+        think=get_think()
+    )
+
     console.print(
         Panel.fit(
             "\n".join([
@@ -245,19 +252,28 @@ def run_fox_agent():
                 f"Thinking: [cyan]{'on' if get_think() else 'off'}[/cyan]",
                 "Type [bold]/provider[/bold] to switch provider.",
                 "Type [bold]/think[/bold] to toggle thinking mode.",
-                "Type [bold]/model[/bold] to choose a model."
+                "Type [bold]/model[/bold] to choose a model.",
+                "Type [bold]/talk <member>[/bold] to talk to a Fox Club member.",
+                "Members: julie, annie, selina, gwen, fox",
                 "Type [bold]exit[/bold] to return."
             ]),
             title="[Fox]: Agent"
         )
     )
 
+    in_conversation = False
+
     while True:
         try:
-            user_input = input("\n[You]: ").strip()
+            prompt = f"\n[You{'/' + conv_manager.active_member if getattr(conv_manager, 'active_member', None) else ''}]: "
+            user_input = input(prompt).strip()
             if not user_input:
                 continue
             if user_input.lower() in {"exit", "quit", "0"}:
+                if in_conversation:
+                    console.print("[Fox]: Leaving conversation mode.")
+                    in_conversation = False
+                    continue
                 break
 
             if user_input.lower() in {"/provider", "provider"}:
@@ -308,8 +324,49 @@ def run_fox_agent():
                     console.print("[Fox]: Invalid choice.")
                 continue
 
-            response = run_task(user_input)
-            console.print(f"\n[Fox]: {response}")
+            if user_input.lower() in {"/talk", "talk"}:
+                # Handle /talk commands
+                parts = user_input.split(maxsplit=1)
+                if len(parts) < 2:
+                    console.print("[Fox]: Usage: /talk <member>")
+                    console.print("[Fox]: Available members: julie, annie, selina, gwen, fox")
+                    continue
+                
+                member = parts[1].lower()
+                if member not in {"julie", "annie", "selina", "gwen", "fox"}:
+                    console.print(f"[Fox]: Unknown member '{member}'. Available: julie, annie, selina, gwen, fox")
+                    continue
+                
+                conv_manager.switch_member(member)
+                in_conversation = True
+                console.print(f"[Fox]: Started conversation with {member.capitalize()}.")
+                console.print("[Fox]: Type /back to return to task mode, /exit to exit.")
+                continue
+            
+            if user_input.lower() in {"/back", "back"}:
+                if in_conversation:
+                    console.print("[Fox]: Returning to task mode.")
+                    in_conversation = False
+                else:
+                    console.print("[Fox]: Not in conversation mode.")
+                continue
+            
+            if user_input.lower() in {"/exit", "exit"}:
+                if in_conversation:
+                    console.print("[Fox]: Leaving conversation mode.")
+                    in_conversation = False
+                    continue
+                break
+
+            if in_conversation:
+                # Send message to active member
+                response = conv_manager.send_message(user_input)
+                active = conv_manager.active_member or "fox"
+                console.print(f"\n[{active.capitalize()}]: {response}")
+            else:
+                # Normal task mode
+                response = run_task(user_input)
+                console.print(f"\n[Fox]: {response}")
 
         except KeyboardInterrupt:
             break

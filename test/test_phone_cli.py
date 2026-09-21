@@ -434,123 +434,138 @@ class TestCLIArguments:
 class TestBridgeUnit:
     """Unit tests for KDEConnectBridge (mocking subprocess)."""
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_version_calls_subprocess(self, mock_run, mock_which):
+    def test_version_calls_subprocess(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="kdeconnect-cli 26.08.1\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.version()
         assert result == "kdeconnect-cli 26.08.1"
-        mock_run.assert_called_once_with(["kdeconnect", "--version"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--version"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_list_devices_calls_subprocess(self, mock_run, mock_which):
+    def test_list_devices_calls_subprocess(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="device1\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.list_devices()
         assert result == "device1"
-        mock_run.assert_called_once_with(["kdeconnect", "--list-devices"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--list-devices"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_list_available_calls_subprocess(self, mock_run, mock_which):
+    def test_list_available_calls_subprocess(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="device1\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.list_available()
         assert result == "device1"
-        mock_run.assert_called_once_with(["kdeconnect", "--list-available"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--list-available"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_refresh_calls_subprocess(self, mock_run, mock_which):
+    def test_refresh_calls_subprocess(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="OK\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.refresh()
         assert result == "OK"
-        mock_run.assert_called_once_with(["kdeconnect", "--refresh"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--refresh"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_encryption_info_with_device(self, mock_run, mock_which):
+    def test_encryption_info_with_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="info\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.encryption_info("device123")
         assert result == "info"
-        mock_run.assert_called_once_with(["kdeconnect", "--encryption-info", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--encryption-info", "--device", "device123"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_encryption_info_without_device(self, mock_run, mock_which):
+    def test_encryption_info_without_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="info\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.encryption_info()
         assert result == "info"
-        mock_run.assert_called_once_with(["kdeconnect", "--encryption-info"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--encryption-info"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_ping_with_device(self, mock_run, mock_which):
+    def test_ping_with_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="pong\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.ping("device123")
         assert result == "pong"
-        mock_run.assert_called_once_with(["kdeconnect", "--ping", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--ping", "--device", "device123"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_ping_without_device(self, mock_run, mock_which):
+    def test_ping_without_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="pong\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.ping()
         assert result == "pong"
-        mock_run.assert_called_once_with(["kdeconnect", "--ping"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--ping"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_share_with_device(self, mock_run, mock_which):
+    def test_share_with_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="shared\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.share("/path/file.txt", "device123")
         assert result == "shared"
-        mock_run.assert_called_once_with(["kdeconnect", "--share", "/path/file.txt", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--share", "/path/file.txt", "--device", "device123"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_share_without_device(self, mock_run, mock_which):
+    def test_share_without_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="shared\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.share("/path/file.txt")
         assert result == "shared"
-        mock_run.assert_called_once_with(["kdeconnect", "--share", "/path/file.txt"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--share", "/path/file.txt"], capture_output=True, text=True, check=True)
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_share_text_with_device(self, mock_run, mock_which):
+    def test_share_text_with_device(self, mock_run, mock_isfile, mock_which):
         mock_run.return_value = MagicMock(stdout="shared\n", stderr="", returncode=0)
         bridge = KDEConnectBridge()
         result = bridge.share_text("hello", "device123")
         assert result == "shared"
-        mock_run.assert_called_once_with(["kdeconnect", "--share-text", "hello", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--share-text", "hello", "--device", "device123"], capture_output=True, text=True, check=True)
 
     @patch("shutil.which", return_value=None)
-    def test_missing_binary_raises_error(self, mock_which):
+    @patch("os.path.isfile", return_value=False)
+    @patch("os.access", return_value=False)
+    def test_missing_binary_raises_error(self, mock_access, mock_isfile, mock_which):
         bridge = KDEConnectBridge()
-        with pytest.raises(KDEConnectError, match="KDE Connect CLI 'kdeconnect' was not found"):
+        with pytest.raises(KDEConnectError, match="KDE Connect CLI 'kdeconnect-cli' was not found"):
             bridge.version()
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_subprocess_error_raises_kdeconnect_error(self, mock_run, mock_which):
-        mock_run.side_effect = subprocess.CalledProcessError(1, "kdeconnect", stderr="error output")
+    def test_subprocess_error_raises_kdeconnect_error(self, mock_run, mock_isfile, mock_which):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "kdeconnect-cli", stderr="error output")
         bridge = KDEConnectBridge()
         with pytest.raises(KDEConnectError, match="error output"):
             bridge.version()
 
-    @patch("shutil.which", return_value="/usr/bin/kdeconnect")
+    @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
+    @patch("os.path.isfile", return_value=False)
     @patch("subprocess.run")
-    def test_subprocess_error_with_empty_stderr(self, mock_run, mock_which):
-        exc = subprocess.CalledProcessError(1, "kdeconnect", output="stdout output", stderr="")
+    def test_subprocess_error_with_empty_stderr(self, mock_run, mock_isfile, mock_which):
+        exc = subprocess.CalledProcessError(1, "kdeconnect-cli", output="stdout output", stderr="")
         mock_run.side_effect = exc
         bridge = KDEConnectBridge()
         with pytest.raises(KDEConnectError, match="stdout output"):

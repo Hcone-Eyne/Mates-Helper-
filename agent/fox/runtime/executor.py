@@ -46,7 +46,7 @@ class FileActionExecutor:
         else:
             self._boundary = FoxSecurityBoundary(boundary)
 
-        self._target = self._boundary.root
+        self._target = self._boundary.root_resolved
 
     # ------------------------------------------------------------------
     # Backward compatibility

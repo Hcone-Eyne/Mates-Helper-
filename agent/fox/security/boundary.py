@@ -9,6 +9,7 @@
 # Strong process isolation belongs to a later OS/container/VM phase.
 
 from pathlib import Path
+import os
 
 from .policy import FoxDirectoryPolicy, FoxPolicyError, FoxSecurityError
 
@@ -108,8 +109,9 @@ class FoxSecurityBoundary:
     ):
         root_path = Path(root).expanduser()
 
-        # Resolve the root itself once.
-        root_path = root_path.resolve()
+        # Normalize the root for lexical comparisons (don't resolve symlinks).
+        # Store both normalized and resolved forms.
+        root_path = Path(os.path.normpath(str(root_path)))
 
         if not root_path.exists():
             if not create:
@@ -132,7 +134,10 @@ class FoxSecurityBoundary:
 
         trash_path.mkdir(parents=True, exist_ok=True)
 
+        # Store normalized root for lexical comparisons
+        # Also store resolved root for symlink resolution
         object.__setattr__(self, "_root", root_path)
+        object.__setattr__(self, "_root_resolved", Path(root_path).resolve())
         object.__setattr__(self, "_trash_dir", trash_path)
         object.__setattr__(self, "_policy", FoxDirectoryPolicy(root_path))
         object.__setattr__(self, "_sealed", True)
@@ -153,6 +158,10 @@ class FoxSecurityBoundary:
     @property
     def trash_dir(self) -> Path:
         return self._trash_dir
+
+    @property
+    def root_resolved(self) -> Path:
+        return self._root_resolved
 
     @property
     def policy(self) -> FoxDirectoryPolicy:
@@ -198,7 +207,7 @@ class FoxSecurityBoundary:
                 f"Unable to resolve path safely: {path}"
             ) from exc
 
-        if not self._is_inside_root(resolved):
+        if not self._is_inside_root_resolved(resolved):
             raise PathEscapeError(
                 f"Path escapes Fox security root: {path} -> {resolved}"
             )
@@ -265,6 +274,32 @@ class FoxSecurityBoundary:
     def _is_inside_root(self, path: Path) -> bool:
         try:
             path.relative_to(self._root)
+            return True
+        except ValueError:
+            return False
+
+    def _is_inside_root_resolved(self, path: Path) -> bool:
+        try:
+            path.relative_to(self._root_resolved)
+            return True
+        except ValueError:
+            return False
+
+    def _is_lexically_within_root(self, path: Path) -> bool:
+        """Check whether an absolute path is inside the root without following symlinks."""
+        # Use normpath for both root and candidate to handle symlinks lexically
+        root = Path(os.path.normpath(str(self._root)))
+        normalized = Path(os.path.normpath(str(path)))
+
+        try:
+            normalized.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+    def _is_inside_root_resolved(self, path: Path) -> bool:
+        try:
+            path.relative_to(self._root_resolved)
             return True
         except ValueError:
             return False

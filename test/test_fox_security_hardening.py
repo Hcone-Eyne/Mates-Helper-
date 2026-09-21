@@ -1,15 +1,32 @@
 from pathlib import Path
+import importlib
+import sys
+
+import pytest
+
+def reload_fox_security():
+    """Reload the fox security module to avoid pytest caching."""
+    for mod_name in list(sys.modules.keys()):
+        if 'agent.fox.security' in mod_name:
+            del sys.modules[mod_name]
+    from agent.fox.security import (
+        FoxSecurityBoundary,
+        FoxSecurityError,
+        PathEscapeError,
+        PrivilegedActionError,
+        SymlinkEscapeError,
+    )
+    return FoxSecurityBoundary, FoxSecurityError, PathEscapeError, PrivilegedActionError, SymlinkEscapeError
+
+
+@pytest.fixture
+def fox_security():
+    """Fixture that provides fresh imports for each test."""
+    return reload_fox_security()
 
 import pytest
 
 from agent.fox.runtime.executor import FileActionExecutor
-from agent.fox.security import (
-    FoxSecurityBoundary,
-    FoxSecurityError,
-    PathEscapeError,
-    PrivilegedActionError,
-    SymlinkEscapeError,
-)
 
 
 def make_executor(tmp_path: Path):
@@ -98,6 +115,20 @@ def test_absolute_outside_path_rejected(tmp_path):
 
     with pytest.raises(PathEscapeError):
         boundary.validate_path(outside)
+
+
+def test_absolute_alias_outside_root_rejected(tmp_path, fox_security):
+    FoxSecurityBoundary, _, PathEscapeError, _, _ = fox_security
+    root = tmp_path / "fox"
+    root.mkdir()
+
+    alias = tmp_path / "fox_alias"
+    alias.symlink_to(root, target_is_directory=True)
+
+    boundary = FoxSecurityBoundary(root)
+
+    with pytest.raises(PathEscapeError):
+        boundary.validate_path(alias / "secret.txt")
 
 
 def test_similar_prefix_path_rejected(tmp_path):

@@ -222,6 +222,18 @@ class TestHandleBasicCommand:
 class TestRunTask:
     """Test run_task function (mocked)."""
 
+    @patch("brain.orchestrator.FoxAgent")
+    def test_run_task_greeting_uses_conversation(self, mock_fox_agent):
+        mock_agent = MagicMock()
+        mock_agent.ask.return_value = "Hi! How can I help?"
+        mock_fox_agent.return_value = mock_agent
+
+        from brain.orchestrator import run_task
+        result = run_task("Hi")
+
+        assert result == "Hi! How can I help?"
+        mock_agent.ask.assert_called_once_with("Hi")
+
     @patch("brain.orchestrator.build_runtime")
     @patch("brain.orchestrator.get_provider", return_value="ollama")
     def test_run_task_ollama(self, mock_get_provider, mock_build_runtime):
@@ -251,6 +263,71 @@ class TestRunTask:
         assert result == "Test response"
         mock_build_runtime.assert_called_once()
         mock_runtime.handle.assert_called_once_with("test task")
+
+    @patch("brain.orchestrator.build_runtime")
+    @patch("brain.orchestrator.get_provider", return_value="ollama")
+    def test_run_task_action_reaches_fox_club(self, mock_get_provider, mock_build_runtime):
+        from agent.fox.runtime.runtime import RuntimeResult, SelinaResult
+
+        mock_runtime = MagicMock()
+        mock_selina_result = SelinaResult(
+            success=True,
+            expanded_task="list files",
+            interpretation="list files",
+            action="list_directory",
+            result="workspace/file.txt",
+            error=None,
+        )
+        mock_runtime.handle.return_value = RuntimeResult(
+            user_request="list files",
+            julie_result=MagicMock(),
+            annie_result=MagicMock(),
+            selina_result=mock_selina_result,
+            gwen_result=MagicMock(),
+            final_result=mock_selina_result,
+        )
+        mock_build_runtime.return_value = mock_runtime
+
+        from brain.orchestrator import run_task
+        result = run_task("list files")
+
+        assert result == "workspace/file.txt"
+        mock_build_runtime.assert_called_once()
+        mock_runtime.handle.assert_called_once_with("list files")
+
+    @patch("brain.orchestrator.build_runtime")
+    @patch("brain.orchestrator.get_provider", return_value="ollama")
+    def test_run_task_never_returns_none_for_empty_task_result(
+        self,
+        mock_get_provider,
+        mock_build_runtime,
+    ):
+        from agent.fox.runtime.runtime import RuntimeResult, SelinaResult
+
+        mock_runtime = MagicMock()
+        mock_selina_result = SelinaResult(
+            success=True,
+            expanded_task="do nothing",
+            interpretation="do nothing",
+            action="noop",
+            result=None,
+            error=None,
+        )
+        mock_runtime.handle.return_value = RuntimeResult(
+            user_request="do nothing",
+            julie_result=MagicMock(),
+            annie_result=MagicMock(),
+            selina_result=mock_selina_result,
+            gwen_result=MagicMock(),
+            final_result=mock_selina_result,
+        )
+        mock_build_runtime.return_value = mock_runtime
+
+        from brain.orchestrator import run_task
+        result = run_task("do nothing")
+
+        assert result is not None
+        assert "None" not in result
 
     @patch("brain.orchestrator.FoxAgent")
     @patch("brain.orchestrator.get_provider", return_value="anthropic")
