@@ -287,6 +287,9 @@ Required format:
             text = "\n".join(lines).strip()
             if text.lower().startswith("json\n"):
                 text = text[5:].lstrip()
+        elif text.startswith("{") and text.endswith("}"):
+            # Raw JSON without markdown fences (e.g., when think=True)
+            pass
 
         # this converts the backend text into a Python object
         try:

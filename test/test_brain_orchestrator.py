@@ -222,19 +222,35 @@ class TestHandleBasicCommand:
 class TestRunTask:
     """Test run_task function (mocked)."""
 
-    @patch("brain.orchestrator.FoxAgent")
+    @patch("brain.orchestrator.build_runtime")
     @patch("brain.orchestrator.get_provider", return_value="ollama")
-    def test_run_task_ollama(self, mock_get_provider, mock_fox_agent):
-        mock_agent = MagicMock()
-        mock_agent.ask.return_value = "Test response"
-        mock_fox_agent.return_value = mock_agent
+    def test_run_task_ollama(self, mock_get_provider, mock_build_runtime):
+        from agent.fox.runtime.runtime import RuntimeResult, SelinaResult
+        mock_runtime = MagicMock()
+        mock_selina_result = SelinaResult(
+            success=True,
+            expanded_task="test",
+            interpretation="test",
+            action="test",
+            result="Test response",
+            error=None
+        )
+        mock_runtime.handle.return_value = RuntimeResult(
+            user_request="test task",
+            julie_result=MagicMock(),
+            annie_result=MagicMock(),
+            selina_result=mock_selina_result,
+            gwen_result=MagicMock(),
+            final_result=mock_selina_result
+        )
+        mock_build_runtime.return_value = mock_runtime
 
         from brain.orchestrator import run_task
         result = run_task("test task")
 
         assert result == "Test response"
-        mock_fox_agent.assert_called_once()
-        mock_agent.ask.assert_called_once_with("test task")
+        mock_build_runtime.assert_called_once()
+        mock_runtime.handle.assert_called_once_with("test task")
 
     @patch("brain.orchestrator.FoxAgent")
     @patch("brain.orchestrator.get_provider", return_value="anthropic")

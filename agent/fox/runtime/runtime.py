@@ -203,9 +203,20 @@ def build_runtime(
     model: str | None = None,
     think: bool = False
 ) -> Runtime:
-    """Create a Runtime wired to a local Ollama server."""
+    """Create a Runtime wired to a local Ollama server.
+
+    Julie and Annie require structured JSON output and must use think=False
+    to prevent thinking output from corrupting JSON parsing. Gwen uses the
+    user-specified think setting for free-form review.
+    """
     try:
-        client = OllamaClient(
+        # Julie and Annie need think=False for reliable JSON parsing
+        structured_client = OllamaClient(
+            model=model,
+            think=False
+        )
+        # Gwen uses the user's think setting for free-form review
+        review_client = OllamaClient(
             model=model,
             think=think
         )
@@ -214,8 +225,8 @@ def build_runtime(
             f"[Runtime]: Cannot start — Ollama is unavailable: {exc}"
         ) from exc
 
-    julie = Julie(OllamaReasoningBackend(client))
-    annie = Annie(OllamaAnnieBackend(client))
+    julie = Julie(OllamaReasoningBackend(structured_client))
+    annie = Annie(OllamaAnnieBackend(structured_client))
 
     fox_space = ensure_fox_space()
     if target_dir is not None:
@@ -227,7 +238,7 @@ def build_runtime(
     executor = FileActionExecutor(boundary)
 
     selina = Selina(executor)
-    gwen = Gwen(OllamaCriticBackend(client))
+    gwen = Gwen(OllamaCriticBackend(review_client))
 
     return Runtime(
         julie=julie,

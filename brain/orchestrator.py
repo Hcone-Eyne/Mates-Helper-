@@ -111,8 +111,8 @@ def run_task(task_description: str, provider: str | None = None):
 
     if provider_name == "ollama":
         runtime = build_runtime(model=get_model(), think=get_think(), target_dir=".")
-        agent = FoxAgent(runtime=runtime)
-        return agent.ask(task_description)
+        result = runtime.handle(task_description)
+        return result.final_result.result if hasattr(result.final_result, 'result') else str(result.final_result)
 
     if provider_name == "anthropic":
         try:

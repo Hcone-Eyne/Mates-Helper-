@@ -138,11 +138,16 @@ class Julie:
     def _parse_result(raw_result: str) -> dict[str, Any]:
         """Parse and validate Julie's structured response."""
         content = raw_result.strip()
+        # Handle both markdown-fenced and raw JSON responses
         if content.startswith("```") and content.endswith("```"):
             lines = content.splitlines()
             content = "\n".join(lines[1:-1]).strip()
             if content.lower().startswith("json\n"):
                 content = content[5:].lstrip()
+        elif content.startswith("{") and content.endswith("}"):
+            # Raw JSON without markdown fences (e.g., when think=True)
+            pass
+        # Note: We don't reject other formats here; let json.loads handle invalid JSON
 
         try:
             payload = json.loads(content)

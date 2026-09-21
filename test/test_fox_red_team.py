@@ -27,6 +27,7 @@ def make_boundary(tmp_path: Path) -> FoxSecurityBoundary:
     return FoxSecurityBoundary(root)
 
 
+
 def make_executor(tmp_path: Path) -> tuple[Path, FoxSecurityBoundary, FileActionExecutor]:
     """Create a test executor with FoxSecurityBoundary."""
     root = tmp_path / "fox"
