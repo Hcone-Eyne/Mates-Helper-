@@ -11,6 +11,8 @@ from .boundary import (
     SymlinkEscapeError,
 )
 
+from agent.fox.storage import StorageQuotaError, StorageInfo
+
 __all__ = [
     "FoxDirectoryPolicy",
     "FoxPolicyError",
@@ -20,5 +22,7 @@ __all__ = [
     "PathEscapeError",
     "PrivilegedActionError",
     "SymlinkEscapeError",
+    "StorageQuotaError",
+    "StorageInfo",
 ]
 

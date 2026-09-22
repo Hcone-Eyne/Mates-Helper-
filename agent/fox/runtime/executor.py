@@ -11,6 +11,7 @@ from agent.fox.security import (
     FoxSecurityBoundary,
     FoxSecurityError,
     InvalidActionError,
+    StorageQuotaError,
 )
 
 
@@ -134,6 +135,13 @@ class FileActionExecutor:
 
     def _validate_write(self, path: str | Path) -> Path:
         return self._boundary.validate_write(path)
+
+    def _check_quota_for_write(self, source: Path, dest: Path, operation: str) -> None:
+        """Check storage quota for a write operation."""
+        try:
+            self._boundary.check_storage_quota_for_write(source, dest, operation)
+        except StorageQuotaError as e:
+            raise RuntimeError(f"Storage quota exceeded: {e}") from e
 
     def _validate_new_name(self, name: str) -> str:
         return self._boundary.validate_new_name(name)
@@ -374,6 +382,9 @@ class FileActionExecutor:
                 dest_path
             )
 
+        # Check storage quota before moving
+        self._check_quota_for_write(src_path, dest_path, "move")
+
         self._boundary.validate_write(dest_path)
 
         self._ensure_parent_dirs(dest_path)
@@ -437,6 +448,9 @@ class FileActionExecutor:
             dest_path = self._resolve_collision(
                 dest_path
             )
+
+        # Check storage quota before copying (copy increases usage)
+        self._check_quota_for_write(src_path, dest_path, "copy")
 
         self._validate_write(dest_path)
 
@@ -538,6 +552,9 @@ class FileActionExecutor:
 
         dest_path = self._boundary.validate_create(path)
 
+        # Check storage quota before creating folder
+        self._check_quota_for_write(dest_path, dest_path, "create")
+
         if parents:
             dest_path.mkdir(
                 parents=True,
@@ -586,6 +603,9 @@ class FileActionExecutor:
             raise FoxSecurityError(
                 "File is already in trash"
             )
+
+        # Check storage quota (delete moves to trash, which is already counted)
+        self._check_quota_for_write(src_path, src_path, "delete")
 
         rel_path = self._get_relative(src_path)
 
@@ -772,6 +792,9 @@ class FileActionExecutor:
             dest_path = self._resolve_collision(
                 dest_path
             )
+
+        # Check storage quota (restore from trash doesn't increase total usage)
+        self._check_quota_for_write(src_path, dest_path, "restore")
 
         self._boundary.validate_write(dest_path)
 

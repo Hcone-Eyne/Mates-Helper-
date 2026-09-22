@@ -50,7 +50,8 @@ class TestFoxSpaceIntegration:
             custom_root.mkdir()
 
             boundary = FoxSecurityBoundary(custom_root)
-            assert boundary.root == custom_root.resolve()
+            # boundary.root is normalized (not resolved) to handle symlinks consistently
+            assert boundary.root == Path(os.path.normpath(str(custom_root)))
 
             # Verify it's not the default Fox Space
             assert boundary.root != get_fox_space()
