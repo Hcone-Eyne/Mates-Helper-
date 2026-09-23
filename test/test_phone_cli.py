@@ -98,6 +98,10 @@ class FailingBridge(MockBridge):
         self.calls.append(("share_text", (text, device)))
         raise KDEConnectError(self.error_msg)
 
+    def send_sms(self, destination, message, device=None):
+        self.calls.append(("send_sms", (destination, message, device)))
+        raise KDEConnectError(self.error_msg)
+
 
 class MissingBinaryBridge(MockBridge):
     """Mock bridge that simulates missing KDE Connect binary."""
@@ -124,6 +128,9 @@ class MissingBinaryBridge(MockBridge):
         raise KDEConnectError("KDE Connect CLI 'kdeconnect' was not found.")
 
     def share_text(self, text, device=None):
+        raise KDEConnectError("KDE Connect CLI 'kdeconnect' was not found.")
+
+    def send_sms(self, destination, message, device=None):
         raise KDEConnectError("KDE Connect CLI 'kdeconnect' was not found.")
 
 

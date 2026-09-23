@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
 
 
 class KDEConnectError(RuntimeError):
@@ -120,3 +123,114 @@ class KDEConnectBridge:
             args.extend(["--device", device])
 
         return self._run(*args)
+
+    def list_notifications(self, device: str | None = None) -> str:
+        """List notifications from the connected device."""
+        args = ["--list-notifications"]
+
+        if device:
+            args.extend(["--device", device])
+
+        return self._run(*args)
+
+    def list_notifications_json(self, device: str | None = None) -> list[dict]:
+        """List notifications from the connected device as parsed JSON."""
+        # KDE Connect doesn't have a --json flag for --list-notifications yet
+        # We'll need to parse the text output
+        raw_output = self.list_notifications(device)
+        return self._parse_notifications_output(raw_output)
+
+    def _parse_notifications_output(self, output: str) -> list[dict]:
+        """Parse KDE Connect --list-notifications text output into structured data.
+        
+        KDE Connect output format (approximate, varies by version):
+        [
+          {
+            "id": "notification_id",
+            "appName": "App Name",
+            "packageName": "com.package.name",
+            "title": "Notification title",
+            "text": "Notification body text",
+            "timestamp": 1234567890000,
+            ...
+          }
+        ]
+        Or plain text format if JSON not available.
+        """
+        output = output.strip()
+        if not output:
+            return []
+
+        # Try to parse as JSON first (newer KDE Connect versions)
+        try:
+            data = json.loads(output)
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback: parse plain text format (older versions or fallback)
+        # This is a best-effort parsing - format may vary
+        notifications = []
+        lines = output.strip().split('\n')
+        current = {}
+        for line in lines:
+            line = line.strip()
+            if not line:
+                if current:
+                    notifications.append(current)
+                    current = {}
+                continue
+            
+            if ':' in line:
+                key, value = line.split(':', 1)
+                current[key.strip()] = value.strip()
+        
+        if current:
+            notifications.append(current)
+        
+        return notifications
+
+    def get_notifications(self, device: str | None = None) -> list[dict]:
+        """Get parsed notifications from the device.
+        
+        This is a higher-level method that handles parsing and returns
+        structured notification data. Returns empty list if device
+        is not connected or has no notifications.
+        """
+        try:
+            return self.list_notifications_json(device)
+        except Exception:
+            # Device not connected, no notifications, or parse error
+            return []
+
+    def send_sms(self, destination: str, message: str, device: str | None = None) -> str:
+        """Send an SMS message via KDE Connect.
+        
+        Args:
+            destination: Phone number to send SMS to
+            message: Message text to send
+            device: Target device ID
+            
+        Returns:
+            Success message from KDE Connect
+        """
+        args = ["--send-sms", message]
+        
+        if destination:
+            args.extend(["--destination", destination])
+        
+        if device:
+            args.extend(["--device", device])
+        
+        return self._run(*args)
+
+    def list_sms(self, device: str | None = None) -> str:
+        """List SMS messages from the device.
+        
+        Note: KDE Connect's SMS functionality may be limited
+        depending on the device and Android version.
+        """
+        # KDE Connect doesn't have a direct --list-sms command
+        # This is a placeholder for future implementation
+        return "SMS listing not yet supported by KDE Connect CLI"

@@ -13,6 +13,7 @@ from phone.security.permission import (
     permission_label,
     is_allowed,
 )
+from phone.events import NotificationEvent, MessageEvent
 
 def _permission_symbol(allowed: bool):
     return "✓" if allowed else "○"
@@ -68,6 +69,18 @@ def main() -> None:
     text_parser.add_argument("text")
     text_parser.add_argument("--device")
 
+    notifications_parser = sub.add_parser("notifications")
+    notifications_parser.add_argument("--device")
+    notifications_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    messages_parser = sub.add_parser("messages")
+    messages_parser.add_argument("--device")
+
+    sms_parser = sub.add_parser("sms")
+    sms_parser.add_argument("destination", help="Phone number to send SMS to")
+    sms_parser.add_argument("message", help="Message text to send")
+    sms_parser.add_argument("--device")
+
     permissions_parser = sub.add_parser("permissions")
     permissions_parser.add_argument("--device")
 
@@ -107,6 +120,32 @@ def main() -> None:
 
         elif args.command == "permissions":
             show_permission(bridge, args.device)
+
+        elif args.command == "notifications":
+            notifications = bridge.get_notifications(args.device)
+            if args.json:
+                import json
+                print(json.dumps(notifications, indent=2, default=str))
+            else:
+                if not notifications:
+                    print("No notifications found or device not connected.")
+                else:
+                    for n in notifications:
+                        app = n.get('appName', n.get('app_name', 'Unknown'))
+                        title = n.get('title', 'No title')
+                        text = n.get('text', n.get('body', ''))
+                        print(f"[{n.get('id', '?')}] {app}: {title} - {text}")
+
+        elif args.command == "messages":
+            # KDE Connect doesn't have a direct message listing command yet
+            print("Message listing not yet supported by KDE Connect CLI")
+            print("Use 'sms' command to send SMS messages")
+
+        elif args.command == "sms":
+            if not args.destination or not args.message:
+                print("Error: SMS requires destination and message", file=sys.stderr)
+                sys.exit(1)
+            print(bridge.send_sms(args.destination, args.message, args.device))
 
     except KDEConnectError as exc:
         print(f"Error: {exc}", file=sys.stderr)
