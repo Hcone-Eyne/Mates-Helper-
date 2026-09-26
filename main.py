@@ -13,6 +13,9 @@ from Cli.console import run_fox_agent
 # imports from file_manager
 from Cli.console import run_file_manager
 
+# imports from phone hub
+from Cli.console import run_phone_hub
+
 # adding console variable
 console = Console()
 
@@ -24,7 +27,8 @@ def menu_bar():
         "[bold blue]2[/bold blue]. Finance\n"
         "[bold blue]3[/bold blue]. Fox Agent\n"
         "[bold blue]4[/bold blue]. Files\n"
-        "[bold blue]5[/bold blue]. Exit",
+        "[bold blue]5[/bold blue]. Phone\n"
+        "[bold blue]6[/bold blue]. Exit",
         title="[Fox]: Main Menu"
     ))
 
@@ -53,6 +57,8 @@ def run():
         elif choice == "4":
             run_file_manager()
         elif choice == "5":
+            run_phone_hub()
+        elif choice == "6":
             console.print("[Fox]: See you Soon Boss.....")
             break
         else:

@@ -115,7 +115,7 @@ class TestBridgeUnitExtended:
         assert result == "[]"
         mock_run.assert_called_once_with(
             ["kdeconnect-cli", "--list-notifications", "--device", "device123"],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=30
         )
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
@@ -128,7 +128,7 @@ class TestBridgeUnitExtended:
         assert result == "[]"
         mock_run.assert_called_once_with(
             ["kdeconnect-cli", "--list-notifications"],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=30
         )
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
@@ -141,7 +141,7 @@ class TestBridgeUnitExtended:
         assert result == "sent"
         mock_run.assert_called_once_with(
             ["kdeconnect-cli", "--send-sms", "Hello", "--destination", "+1234567890", "--device", "device123"],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=30
         )
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
@@ -154,5 +154,5 @@ class TestBridgeUnitExtended:
         assert result == "sent"
         mock_run.assert_called_once_with(
             ["kdeconnect-cli", "--send-sms", "Hello", "--destination", "+1234567890"],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=30
         )

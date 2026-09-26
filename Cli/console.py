@@ -1,5 +1,6 @@
 # importing the required libraries
 import os
+import shlex
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -233,6 +234,66 @@ def run_file_manager():
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
             input("\nPress Enter to continue...")
+
+# Phone Hub - routes commands through the phone CLI (phone.phone_cli.phone_cli)
+# so the phone module stays isolated behind its own command parser
+def _phone_pause():
+    # pause prompt must never kill the CLI when stdin ends (piped/closed input)
+    # returns False when input is exhausted so the caller can leave the hub
+    try:
+        input("\nPress Enter to continue...")
+        return True
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+def run_phone_hub():
+    # lazy import: phone module is only loaded when the user opens the hub
+    from phone.phone_cli import phone_cli
+
+    while True:
+        try:
+            os.system('clear')
+            console.print(Panel.fit(
+                "[bold blue]status[/bold blue]                      - KDE Connect version\n"
+                "[bold blue]devices[/bold blue] / [bold blue]available[/bold blue] / [bold blue]refresh[/bold blue]       - list or refresh phones\n"
+                "[bold blue]ping --device <id>[/bold blue]             - ping the paired phone\n"
+                "[bold blue]encryption --device <id>[/bold blue]      - show pairing fingerprints\n"
+                "[bold blue]share <path> --device <id>[/bold blue]   - send a file\n"
+                "[bold blue]share-text <text> --device <id>[/bold blue] - send text\n"
+                "[bold blue]notifications|messages|list-sms[/bold blue] - read from the phone\n"
+                "[bold blue]sms <number> <message>[/bold blue]       - send an SMS\n"
+                "[bold blue]permissions[/bold blue]                  - show phone permissions\n"
+                "[bold blue]0[/bold blue] - back to main menu",
+                title="[Fox]: Phone Hub"
+            ))
+            cmd = input("\n[Fox]: phone > ").strip()
+            if not cmd:
+                continue
+            # adding this to prevent infinte loop!
+            if cmd.lower() in {"0", "exit", "quit", "back"}:
+                console.print("[Fox]: Exiting Phone Hub.....")
+                break
+
+            try:
+                phone_cli.main(shlex.split(cmd))
+            except SystemExit as exc:
+                # argparse / phone CLI exit codes must not kill the main CLI
+                if exc.code not in (0, None):
+                    console.print("[Fox]: Phone command failed, try again.....")
+            except ValueError as exc:
+                # shlex could not parse the command line (e.g. unmatched quote)
+                console.print(f"[Fox]: Couldn't parse that command: {exc}")
+            if not _phone_pause():
+                console.print("\n[Fox]: Exiting Phone Hub.....")
+                break
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[Fox]: Exiting Phone Hub.....")
+            break
+        except Exception as e:
+            console.print(f"[Fox]: Error Occured: {e}")
+            if not _phone_pause():
+                console.print("\n[Fox]: Exiting Phone Hub.....")
+                break
 
 # this function is ment for to run the fox agent, which performs a agentic tasks (fixed)
 def run_fox_agent():

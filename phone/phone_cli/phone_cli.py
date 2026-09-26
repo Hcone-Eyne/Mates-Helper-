@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
-from phone.bridge.kdeconnect import KDEConnectBridge, KDEConnectError
+from phone.bridge.kdeconnect import (
+    KDEConnectBridge,
+    KDEConnectError,
+    KDEConnectUnsupportedError,
+    KDEConnectPermissionError,
+    KDEConnectDeviceError,
+    KDEConnectParseError,
+    KDEConnectEmptyError,
+)
 from phone.security.permission import (
     PhonePermision,
     READ_ONLY,
@@ -39,7 +48,7 @@ def show_permission(bridge: KDEConnectBridge, device: str | None = None):
         allowed = is_allowed(permission, DEFAULT_PERMISSIONS)
         print(f"{permission_label(permission):<20}{_permission_symbol(allowed)}")
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="fox-phone",
         description="Isolated Android ↔ Mac Phone Hub",
@@ -56,35 +65,42 @@ def main() -> None:
     sub.add_parser("refresh")
 
     encryption_parser = sub.add_parser("encryption")
-    encryption_parser.add_argument("--device")
+    encryption_parser.add_argument("-d", "--device")
 
     ping_parser = sub.add_parser("ping")
-    ping_parser.add_argument("--device")
+    ping_parser.add_argument("-d", "--device")
 
     share_parser = sub.add_parser("share")
     share_parser.add_argument("path")
-    share_parser.add_argument("--device")
+    share_parser.add_argument("-d", "--device")
 
     text_parser = sub.add_parser("share-text")
     text_parser.add_argument("text")
-    text_parser.add_argument("--device")
+    text_parser.add_argument("-d", "--device")
 
     notifications_parser = sub.add_parser("notifications")
-    notifications_parser.add_argument("--device")
+    notifications_parser.add_argument("-d", "--device")
     notifications_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     messages_parser = sub.add_parser("messages")
-    messages_parser.add_argument("--device")
+    messages_parser.add_argument("-d", "--device")
+    messages_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     sms_parser = sub.add_parser("sms")
     sms_parser.add_argument("destination", help="Phone number to send SMS to")
     sms_parser.add_argument("message", help="Message text to send")
-    sms_parser.add_argument("--device")
+    sms_parser.add_argument("-d", "--device")
+
+    list_sms_parser = sub.add_parser("list-sms")
+    list_sms_parser.add_argument("-d", "--device")
+    list_sms_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     permissions_parser = sub.add_parser("permissions")
-    permissions_parser.add_argument("--device")
+    permissions_parser.add_argument("-d", "--device")
 
-    args = parser.parse_args()
+    # argv=None keeps the original behaviour (read sys.argv); passing an explicit
+    # list lets the main CLI dispatch phone commands without touching sys.argv.
+    args = parser.parse_args(argv)
 
     bridge = KDEConnectBridge()
 
@@ -137,15 +153,78 @@ def main() -> None:
                         print(f"[{n.get('id', '?')}] {app}: {title} - {text}")
 
         elif args.command == "messages":
-            # KDE Connect doesn't have a direct message listing command yet
-            print("Message listing not yet supported by KDE Connect CLI")
-            print("Use 'sms' command to send SMS messages")
+            try:
+                messages = bridge.list_sms(args.device)
+                if args.json:
+                    import json
+                    print(json.dumps(list(messages), indent=2, default=str))
+                else:
+                    if not messages:
+                        print("No messages found.")
+                    else:
+                        for m in messages:
+                            print(f"[{m.get('id', '?')}] {m.get('sender', 'Unknown')}: {m.get('body', '')}")
+            except KDEConnectUnsupportedError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectDeviceError as exc:
+                print(f"Error: Device error - {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectPermissionError as exc:
+                print(f"Error: Permission denied - {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectParseError as exc:
+                print(f"Error: Failed to parse messages - {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectEmptyError:
+                print("No messages found.")
+            except KDEConnectError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+
+        elif args.command == "list-sms":
+            try:
+                messages = bridge.list_sms(args.device)
+                if args.json:
+                    import json
+                    print(json.dumps(list(messages), indent=2, default=str))
+                else:
+                    if not messages:
+                        print("No messages found.")
+                    else:
+                        for m in messages:
+                            print(f"[{m.get('id', '?')}] {m.get('sender', 'Unknown')}: {m.get('body', '')}")
+            except KDEConnectUnsupportedError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectDeviceError as exc:
+                print(f"Error: Device error - {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectPermissionError as exc:
+                print(f"Error: Permission denied - {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectParseError as exc:
+                print(f"Error: Failed to parse messages - {exc}", file=sys.stderr)
+                sys.exit(1)
+            except KDEConnectEmptyError:
+                print("No messages found.")
+            except KDEConnectError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
 
         elif args.command == "sms":
             if not args.destination or not args.message:
                 print("Error: SMS requires destination and message", file=sys.stderr)
                 sys.exit(1)
-            print(bridge.send_sms(args.destination, args.message, args.device))
+            try:
+                result = bridge.send_sms(args.destination, args.message, args.device)
+                if result:
+                    print(result)
+                else:
+                    print("SMS sent successfully")
+            except KDEConnectError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
 
     except KDEConnectError as exc:
         print(f"Error: {exc}", file=sys.stderr)

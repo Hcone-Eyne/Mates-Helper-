@@ -11,6 +11,37 @@ from typing import Optional
 
 class KDEConnectError(RuntimeError):
     """Raised when KDE Connect cannot perform an operation."""
+    pass
+
+
+class KDEConnectUnsupportedError(KDEConnectError):
+    """Raised when KDE Connect does not support a requested operation."""
+    pass
+
+
+class KDEConnectPermissionError(KDEConnectError):
+    """Raised when permission is denied for an operation."""
+    pass
+
+
+class KDEConnectDeviceError(KDEConnectError):
+    """Raised when device is not connected or not available."""
+    pass
+
+
+class KDEConnectParseError(KDEConnectError):
+    """Raised when KDE Connect output cannot be parsed."""
+    pass
+
+
+class KDEConnectEmptyError(KDEConnectError):
+    """Raised when the result is legitimately empty (no data)."""
+    pass
+
+
+# Bound every kdeconnect-cli invocation so a wedged D-Bus service or stalled
+# daemon cannot hang the CLI (and the menu hub) indefinitely.
+KDECONNECT_TIMEOUT = 30
 
 
 def _find_kdeconnect_cli() -> str:
@@ -54,7 +85,13 @@ class KDEConnectBridge:
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=KDECONNECT_TIMEOUT,
             )
+        except subprocess.TimeoutExpired as exc:
+            raise KDEConnectError(
+                f"KDE Connect command timed out after "
+                f"{KDECONNECT_TIMEOUT}s: {' '.join(args)}"
+            ) from exc
         except subprocess.CalledProcessError as exc:
             message = exc.stderr.strip() or exc.stdout.strip()
 
@@ -194,15 +231,27 @@ class KDEConnectBridge:
     def get_notifications(self, device: str | None = None) -> list[dict]:
         """Get parsed notifications from the device.
         
-        This is a higher-level method that handles parsing and returns
-        structured notification data. Returns empty list if device
-        is not connected or has no notifications.
+        Returns:
+            List of notification dictionaries. Empty list if no notifications.
+
+        Raises:
+            KDEConnectDeviceError: If device is not connected or not available.
+            KDEConnectParseError: If notification data cannot be parsed.
+            KDEConnectError: For other KDE Connect errors.
         """
         try:
             return self.list_notifications_json(device)
-        except Exception:
-            # Device not connected, no notifications, or parse error
-            return []
+        except KDEConnectDeviceError:
+            raise
+        except KDEConnectParseError:
+            raise
+        except Exception as exc:
+            # Check if it's a device connectivity issue
+            if "No such object path" in str(exc) or "Not connected to D-Bus" in str(exc):
+                raise KDEConnectDeviceError(
+                    f"Device not connected or not reachable: {exc}"
+                ) from None
+            raise
 
     def send_sms(self, destination: str, message: str, device: str | None = None) -> str:
         """Send an SMS message via KDE Connect.
@@ -225,12 +274,13 @@ class KDEConnectBridge:
         
         return self._run(*args)
 
-    def list_sms(self, device: str | None = None) -> str:
+    def list_sms(self, device: str | None = None) -> list[dict]:
         """List SMS messages from the device.
         
-        Note: KDE Connect's SMS functionality may be limited
-        depending on the device and Android version.
+        Raises:
+            KDEConnectUnsupportedError: KDE Connect does not support listing SMS messages.
         """
-        # KDE Connect doesn't have a direct --list-sms command
-        # This is a placeholder for future implementation
-        return "SMS listing not yet supported by KDE Connect CLI"
+        raise KDEConnectUnsupportedError(
+            "KDE Connect does not support listing SMS messages. "
+            "Use --send-sms to send messages instead."
+        )

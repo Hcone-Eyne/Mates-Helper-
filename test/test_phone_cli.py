@@ -58,6 +58,14 @@ class MockBridge:
             raise KDEConnectError("No device specified")
         return f"Shared text: {text}"
 
+    def send_sms(self, destination, message, device=None):
+        self.calls.append(("send_sms", (destination, message, device)))
+        return "SMS sent"
+
+    def list_sms(self, device=None):
+        self.calls.append(("list_sms", (device,)))
+        return []
+
 
 class FailingBridge(MockBridge):
     """Mock bridge that raises KDEConnectError on all calls."""
@@ -107,6 +115,9 @@ class MissingBinaryBridge(MockBridge):
     """Mock bridge that simulates missing KDE Connect binary."""
 
     def version(self):
+        raise KDEConnectError("KDE Connect CLI 'kdeconnect' was not found.")
+
+    def send_sms(self, destination, message, device=None):
         raise KDEConnectError("KDE Connect CLI 'kdeconnect' was not found.")
 
     def list_devices(self):
@@ -449,7 +460,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.version()
         assert result == "kdeconnect-cli 26.08.1"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--version"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--version"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -459,7 +470,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.list_devices()
         assert result == "device1"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--list-devices"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--list-devices"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -469,7 +480,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.list_available()
         assert result == "device1"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--list-available"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--list-available"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -479,7 +490,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.refresh()
         assert result == "OK"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--refresh"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--refresh"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -489,7 +500,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.encryption_info("device123")
         assert result == "info"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--encryption-info", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--encryption-info", "--device", "device123"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -499,7 +510,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.encryption_info()
         assert result == "info"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--encryption-info"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--encryption-info"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -509,7 +520,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.ping("device123")
         assert result == "pong"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--ping", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--ping", "--device", "device123"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -519,7 +530,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.ping()
         assert result == "pong"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--ping"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--ping"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -529,7 +540,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.share("/path/file.txt", "device123")
         assert result == "shared"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--share", "/path/file.txt", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--share", "/path/file.txt", "--device", "device123"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -539,7 +550,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.share("/path/file.txt")
         assert result == "shared"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--share", "/path/file.txt"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--share", "/path/file.txt"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value="/usr/bin/kdeconnect-cli")
     @patch("os.path.isfile", return_value=False)
@@ -549,7 +560,7 @@ class TestBridgeUnit:
         bridge = KDEConnectBridge()
         result = bridge.share_text("hello", "device123")
         assert result == "shared"
-        mock_run.assert_called_once_with(["kdeconnect-cli", "--share-text", "hello", "--device", "device123"], capture_output=True, text=True, check=True)
+        mock_run.assert_called_once_with(["kdeconnect-cli", "--share-text", "hello", "--device", "device123"], capture_output=True, text=True, check=True, timeout=30)
 
     @patch("shutil.which", return_value=None)
     @patch("os.path.isfile", return_value=False)
