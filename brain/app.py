@@ -26,7 +26,13 @@ class TaskRequest(BaseModel):
 # this function is going to handle the process of submiting the task
 def submit_task (req: TaskRequest):
     task_id = task_store.add_task(req.description)
-    result = run_task(req.description, req.provider)
+    try:
+        result = run_task(req.description, req.provider)
+    except Exception as exc:
+        # A raised run_task must still reach a terminal state - otherwise the
+        # row sits at "pending" forever with no error recorded.
+        task_store.fail_task(task_id, f"[Fox]: Task failed: {exc}")
+        raise
     task_store.complete_task(task_id, result)
     return {"id": task_id, "result": result}
 

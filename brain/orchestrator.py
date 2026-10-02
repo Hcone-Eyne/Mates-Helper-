@@ -11,11 +11,12 @@ import anthropic
 from brain.tools import TOOLS, dispatcher
 
 # additional imports for provider option so user can use it
-from agent.ollama.ollama_agent import FoxAgent
+from agent.ollama.ollama_agent import FoxAgent, MAX_TOOL_TURNS
 from agent.ollama.ollama_agent import OllamaFoxAgent
 from agent.fox.runtime.runtime import build_runtime
 
-# status of the provider
+# status of the provider (defined once - it used to be re-declared further
+# down the file, silently overwriting this assignment)
 CURRENT_PROVIDER = "ollama"
 
 
@@ -27,9 +28,12 @@ SYSTEM_PROMPT = (
     "needs them; otherwise just answer directly. Keep replies short."
 )
 
-CURRENT_PROVIDER = "ollama"
 CURRENT_THINK = False
 _CURRENT_MODEL = None
+
+# Model used for the Anthropic provider. Deployment configuration, not a
+# secret - override with ANTHROPIC_MODEL instead of editing this file.
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 def get_model():
     return _CURRENT_MODEL
@@ -191,7 +195,9 @@ def run_task(task_description: str, provider: str | None = None):
         return _run_conversation(task_description)
 
     if provider_name == "ollama":
-        runtime = build_runtime(model=get_model(), think=get_think(), target_dir=".")
+        # target_dir stays unset: the Fox Club executor is rooted in Fox
+        # Space, never in the repository working directory.
+        runtime = build_runtime(model=get_model(), think=get_think())
         result = runtime.handle(task_description)
         response = (
             result.final_result.result
@@ -213,9 +219,11 @@ def run_task(task_description: str, provider: str | None = None):
 
         messages = [{"role": "user", "content": task_description}]
 
-        while True:
+        # Bounded like the Ollama agent: a model that keeps asking for tools
+        # must never drive an endless paid API loop.
+        for _turn in range(MAX_TOOL_TURNS):
             response = client.messages.create(
-                model="claude-sonnet-5",
+                model=ANTHROPIC_MODEL,
                 max_tokens=1024,
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
@@ -239,5 +247,12 @@ def run_task(task_description: str, provider: str | None = None):
                         }
                     )
             messages.append({"role": "user", "content": tool_result})
+
+        # Tool budget spent without a final answer - stop cleanly instead of
+        # asking the model again.
+        return (
+            f"[Fox]: Stopped after {MAX_TOOL_TURNS} tool turns without a final "
+            "answer. Ask a narrower question and try again."
+        )
 
     return f"[Fox]: Provider '{provider_name}' is not configured yet."

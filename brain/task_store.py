@@ -1,11 +1,41 @@
 # this program is use to store the tasks and agent gets them from here and does the work!
 
 # importing the nessary modules
+import os
 import sqlite3
 import time
 
 # adding the DATA_BASE path!
-DB_PATH = "/data/tasks.db"
+# /data is the compose volume; set FOX_TASK_DB_PATH to point somewhere else
+# (e.g. a temp file) when running the brain outside the container.
+_DOCKER_DB_PATH = "/data/tasks.db"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HOST_DB_PATH = os.path.join(_REPO_ROOT, "data", "tasks.db")
+
+
+def default_db_path() -> str:
+    """Pick a task DB path that is actually writable here.
+
+    Priority:
+      1. FOX_TASK_DB_PATH - always wins (tests, containers, CI).
+      2. /data/tasks.db - only when the compose volume directory exists, so
+         the container keeps its published database.
+      3. <repo>/data/tasks.db - the development/host fallback. Hardcoding
+         /data here made every host run of POST /submit_task fail with
+         "unable to open database file".
+    """
+    override = os.environ.get("FOX_TASK_DB_PATH")
+    if override:
+        return override
+
+    docker_dir = os.path.dirname(_DOCKER_DB_PATH)
+    if os.path.isdir(docker_dir) and os.access(docker_dir, os.W_OK):
+        return _DOCKER_DB_PATH
+
+    return _HOST_DB_PATH
+
+
+DB_PATH = default_db_path()
 
 # conn = _conn is like connection to database and conn.close Ahh that name itself mention that!
 
@@ -45,6 +75,16 @@ def complete_task(task_id: int, result:str):
     conn.execute(
         "UPDATE tasks SET result = ?, status = 'done' WHERE id = ?",
         (result, task_id),
+    )
+    conn.commit()
+    conn.close()
+
+# this function records a terminal failure so a task never stays "pending"
+def fail_task(task_id: int, error: str):
+    conn = _conn()
+    conn.execute(
+        "UPDATE tasks SET result = ?, status = 'failed' WHERE id = ?",
+        (str(error), task_id),
     )
     conn.commit()
     conn.close()

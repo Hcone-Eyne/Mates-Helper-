@@ -51,6 +51,8 @@ def run_scheduler():
     while True:
         # adding failsafe!
         try:
+            # file path is only known after the upload prompt is answered
+            image_path = None
             # this prevent reprint
             os.system('clear')
             # print the options
@@ -103,7 +105,10 @@ def run_scheduler():
             elif choice == "0":
                 break
         except FileNotFoundError:
-            console.print(f"[Fox]: Couldn't find a file at '{image_path}' - Check the path and try again....")
+            # image_path is only set once the upload prompt was answered; a
+            # missing schedule CSV (choice 1/3) must not raise NameError here.
+            where = image_path or SCHEDULE_CSV
+            console.print(f"[Fox]: Couldn't find a file at '{where}' - Check the path and try again....")
             input("\nPress Enter to continue...")
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
@@ -155,18 +160,21 @@ def run_finance_bot():
             elif choice == "0":
                 console.print("[Fox]: Exiting Finance Bot.....")
                 break
-        # this catch the file not found error
-        except Exception as e:
-            console.print(f"[Fox]: Error Occured: {e}")
-            input("\nPress Enter to continue...")
-        # this catch value not found error
+        # ValueError must be caught before Exception - as written the other
+        # way round, `except Exception` swallowed it and the branch never ran
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
             input("\nPress Enter to continue...")
+        # this catch any other error
+        except Exception as e:
+            console.print(f"[Fox]: Error Occured: {e}")
+            input("\nPress Enter to continue...")
         # this catches the keyboard interrupt error to exit the finance bot.....
+        # (without `break` the loop simply redrew the menu and kept going)
         except KeyboardInterrupt:
             console.print("[Fox]: Exiting Finance Bot.....")
             memory_lister()  # calls the memory_lister to display previous operations
+            break
 
 def run_file_manager():
     from File_Manager import organizer, db
@@ -260,9 +268,10 @@ def run_phone_hub():
                 "[bold blue]encryption --device <id>[/bold blue]      - show pairing fingerprints\n"
                 "[bold blue]share <path> --device <id>[/bold blue]   - send a file\n"
                 "[bold blue]share-text <text> --device <id>[/bold blue] - send text\n"
-                "[bold blue]notifications|messages|list-sms[/bold blue] - read from the phone\n"
+                "[bold blue]notifications --device <id>[/bold blue] - read phone notifications\n"
+                "[bold blue]messages|list-sms[/bold blue]         - message listing (not supported by kdeconnect-cli)\n"
                 "[bold blue]sms <number> <message>[/bold blue]       - send an SMS\n"
-                "[bold blue]permissions[/bold blue]                  - show phone permissions\n"
+                "[bold blue]permissions[/bold blue]                  - show the local permission policy\n"
                 "[bold blue]0[/bold blue] - back to main menu",
                 title="[Fox]: Phone Hub"
             ))
@@ -299,11 +308,20 @@ def run_phone_hub():
 def run_fox_agent():
     os.system("clear")
 
-    # Initialize conversation manager
-    conv_manager = FoxConversationManager(
-        model=get_model(),
-        think=get_think()
-    )
+    # Initialize conversation manager. Ollama may be stopped or empty, and the
+    # constructor refuses to start without a model - that must never take the
+    # whole CLI down with it. No provider is substituted behind the user's back.
+    try:
+        conv_manager = FoxConversationManager(
+            model=get_model(),
+            think=get_think()
+        )
+    except Exception as e:
+        console.print(f"[red][Fox]: Agent unavailable: {e}[/red]")
+        console.print("[Fox]: Start the Ollama server (or pull a model), then choose Fox Agent again.")
+        console.print("[Fox]: Returning to the main menu.")
+        input("\nPress Enter to continue...")
+        return
 
     console.print(
         Panel.fit(

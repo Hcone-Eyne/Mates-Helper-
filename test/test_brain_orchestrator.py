@@ -359,3 +359,168 @@ class TestRunTask:
         from brain.orchestrator import run_task
         result = run_task("")
         assert result == "[Fox]: Empty Task, Nothin to Show....."
+
+
+def _ollama_runtime_result(task: str):
+    from agent.fox.runtime.runtime import RuntimeResult, SelinaResult
+
+    selina = SelinaResult(
+        success=True,
+        expanded_task=task,
+        interpretation=task,
+        action="test",
+        result="Test response",
+        error=None,
+    )
+    return RuntimeResult(
+        user_request=task,
+        julie_result=MagicMock(),
+        annie_result=MagicMock(),
+        selina_result=selina,
+        gwen_result=MagicMock(),
+        final_result=selina,
+    )
+
+
+class TestRuntimeRootingAndModelConfig:
+    """Regression tests for the runtime/model configuration findings."""
+
+    @patch("brain.orchestrator.build_runtime")
+    @patch("brain.orchestrator.get_provider", return_value="ollama")
+    def test_fox_club_executor_is_not_rooted_in_the_repo(self, mock_provider, mock_build):
+        from brain.orchestrator import run_task
+
+        mock_build.return_value = MagicMock(
+            handle=MagicMock(return_value=_ollama_runtime_result("test task"))
+        )
+
+        assert run_task("test task") == "Test response"
+
+        # Passing target_dir="." made the Fox Club executor able to write and
+        # delete at repository root; leaving it unset roots it in Fox Space.
+        assert mock_build.call_args.kwargs.get("target_dir") is None
+
+    @patch("brain.orchestrator._get_anthropic_client")
+    @patch("brain.orchestrator.get_provider", return_value="anthropic")
+    def test_anthropic_model_comes_from_configuration(self, mock_provider, mock_client):
+        import brain.orchestrator as orch
+        from brain.orchestrator import run_task
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "hello"
+
+        response = MagicMock()
+        response.stop_reason = "end_turn"
+        response.content = [text_block]
+
+        client = MagicMock()
+        client.messages.create.return_value = response
+        mock_client.return_value = client
+
+        with patch.object(orch, "ANTHROPIC_MODEL", "claude-custom-test"):
+            assert run_task("test task") == "hello"
+
+        assert client.messages.create.call_args.kwargs["model"] == "claude-custom-test"
+
+    def test_anthropic_model_has_a_documented_default(self):
+        import brain.orchestrator as orch
+
+        assert isinstance(orch.ANTHROPIC_MODEL, str)
+        assert orch.ANTHROPIC_MODEL == "claude-sonnet-5"
+
+    def test_provider_state_is_not_silently_reassigned(self):
+        # CURRENT_PROVIDER used to be assigned twice at module level, which
+        # made the second assignment the real one.
+        import re
+
+        import brain.orchestrator as orch
+
+        source = open(orch.__file__).read()
+        module_level = re.findall(r"^CURRENT_PROVIDER = ", source, re.MULTILINE)
+        assert len(module_level) == 1
+
+
+class TestAnthropicToolLoopIsBounded:
+    """Regression for the unbounded Anthropic tool loop.
+
+    The loop used to be `while True`. A model that only ever answers with
+    stop_reason='tool_use' drove it past 61 API calls with no termination.
+    """
+
+    @staticmethod
+    def _tool_use_response():
+        block = MagicMock()
+        block.type = "tool_use"
+        block.name = "schedule_view"
+        block.input = {"query": "monday"}
+        block.id = "toolu_1"
+
+        response = MagicMock()
+        response.stop_reason = "tool_use"
+        response.content = [block]
+        return response
+
+    @patch("brain.orchestrator.dispatcher", return_value="ok")
+    @patch("brain.orchestrator.get_provider", return_value="anthropic")
+    @patch("brain.orchestrator._get_anthropic_client")
+    def test_loop_stops_at_the_turn_limit(
+        self, mock_get_client, mock_get_provider, mock_dispatcher
+    ):
+        from brain.orchestrator import MAX_TOOL_TURNS, run_task
+
+        client = MagicMock()
+        client.messages.create.return_value = self._tool_use_response()
+        mock_get_client.return_value = client
+
+        result = run_task("show my schedule")
+
+        # Bounded, and it terminates on its own rather than looping forever.
+        assert MAX_TOOL_TURNS == 5
+        assert client.messages.create.call_count == MAX_TOOL_TURNS
+        assert isinstance(result, str) and result
+        assert "Stopped after" in result
+
+    @patch("brain.orchestrator.get_provider", return_value="anthropic")
+    @patch("brain.orchestrator._get_anthropic_client")
+    def test_final_answer_still_wins_before_the_limit(
+        self, mock_get_client, mock_get_provider
+    ):
+        from brain.orchestrator import run_task
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "the answer"
+
+        final = MagicMock()
+        final.stop_reason = "end_turn"
+        final.content = [text_block]
+
+        client = MagicMock()
+        client.messages.create.side_effect = [
+            self._tool_use_response(),
+            final,
+        ]
+        mock_get_client.return_value = client
+
+        assert run_task("show my schedule") == "the answer"
+        assert client.messages.create.call_count == 2
+
+    @patch("brain.orchestrator.dispatcher", side_effect=RuntimeError("tool exploded"))
+    @patch("brain.orchestrator.get_provider", return_value="anthropic")
+    @patch("brain.orchestrator._get_anthropic_client")
+    def test_a_failing_tool_does_not_hang_the_loop(
+        self, mock_get_client, mock_get_provider, mock_dispatcher
+    ):
+        # A raising dispatcher used to escape run_task; it must still not be
+        # able to spin the API loop.
+        from brain.orchestrator import MAX_TOOL_TURNS, run_task
+
+        client = MagicMock()
+        client.messages.create.return_value = self._tool_use_response()
+        mock_get_client.return_value = client
+
+        with pytest.raises(RuntimeError, match="tool exploded"):
+            run_task("show my schedule")
+
+        assert client.messages.create.call_count <= MAX_TOOL_TURNS

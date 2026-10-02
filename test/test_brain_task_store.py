@@ -104,6 +104,85 @@ class TestTaskStore:
         assert tasks == []
 
 
+class TestDefaultDbPath:
+    """Regression: the default used to be the container-only `/data/tasks.db`.
+
+    Outside Docker `/data` does not exist, so `sqlite3.connect` raised
+    "unable to open database file" and POST /submit_task returned 500. The
+    tests above all monkeypatch DB_PATH, which is why this was invisible.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_env_override(self, monkeypatch):
+        monkeypatch.delenv("FOX_TASK_DB_PATH", raising=False)
+
+    @pytest.fixture()
+    def paths(self, tmp_path, monkeypatch):
+        """Point both candidate paths at temp locations so nothing real is written."""
+        docker_db = tmp_path / "absent" / "tasks.db"
+        host_db = tmp_path / "host" / "tasks.db"
+        host_db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(task_store, "_DOCKER_DB_PATH", str(docker_db))
+        monkeypatch.setattr(task_store, "_HOST_DB_PATH", str(host_db))
+        return docker_db, host_db
+
+    def test_env_override_wins_over_everything(self, tmp_path, monkeypatch, paths):
+        monkeypatch.setenv("FOX_TASK_DB_PATH", str(tmp_path / "env.db"))
+        assert task_store.default_db_path() == str(tmp_path / "env.db")
+
+    def test_docker_volume_is_used_when_it_exists(self, tmp_path, monkeypatch, paths):
+        docker_db, host_db = paths
+        docker_db.parent.mkdir(parents=True, exist_ok=True)
+
+        assert task_store.default_db_path() == str(docker_db)
+
+    def test_missing_data_volume_falls_back_to_the_host_path(self, paths):
+        docker_db, host_db = paths
+
+        assert task_store.default_db_path() == str(host_db)
+
+    def test_host_fallback_is_a_working_database(self, monkeypatch, paths):
+        _docker_db, host_db = paths
+        monkeypatch.setattr(task_store, "DB_PATH", task_store.default_db_path())
+
+        task_id = task_store.add_task("host run")
+        assert task_store.list_task()[0]["status"] == "pending"
+
+        task_store.complete_task(task_id, "all good")
+        assert task_store.list_task()[0]["status"] == "done"
+
+        task_id = task_store.add_task("doomed run")
+        task_store.fail_task(task_id, "[Fox]: Task failed: boom")
+
+        entry = task_store.list_task()[0]
+        assert entry["status"] == "failed"
+        assert "boom" in entry["result"]
+
+    def test_fail_task_reaches_a_terminal_state(self, monkeypatch, paths):
+        _docker_db, host_db = paths
+        monkeypatch.setattr(task_store, "DB_PATH", str(host_db))
+
+        task_id = task_store.add_task("never finishes")
+        assert task_store.list_task()[0]["status"] == "pending"
+
+        task_store.fail_task(task_id, "error")
+
+        entry = task_store.list_task()[0]
+        assert entry["status"] != "pending"
+        assert entry["status"] == "failed"
+
+    def test_repo_fallback_is_never_the_container_path(self):
+        # On a machine with no /data the default must point inside the
+        # repository, not at the container volume.
+        if os.path.isdir(os.path.dirname(task_store._DOCKER_DB_PATH)):
+            pytest.skip("/data exists here - the container path is correct")
+
+        resolved = task_store.default_db_path()
+        assert resolved == task_store._HOST_DB_PATH
+        assert not resolved.startswith("/data/")
+        assert resolved.startswith(task_store._REPO_ROOT + os.sep)
+
+
 class TestTaskStoreEdgeCases:
     """Edge case tests for task_store."""
 
