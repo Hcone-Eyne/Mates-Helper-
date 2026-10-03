@@ -4,9 +4,11 @@ import json
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
+
+from phone.security.isolation import assert_phone_boundary
 
 
 class KDEConnectError(RuntimeError):
@@ -64,16 +66,24 @@ class KDEConnectBridge:
     """
     Isolated interface between Phone Hub and KDE Connect.
 
-    Fox must NOT import or use this class directly.
+    Fox must NOT import or use this class directly - every caller is identified
+    by `source` and agent-side sources are rejected before any device call.
     """
 
     binary: str = ""
+    # Identity of the caller. Fox / Fox Club / Ollama sources are refused.
+    source: str = field(default="phone_cli")
 
     def __post_init__(self):
         if not self.binary:
             self.binary = _find_kdeconnect_cli()
+        assert_phone_boundary(self.source)
 
-    def _run(self, *args: str) -> str:
+    def _run(self, *args: str, stderr_fallback: bool = False) -> str:
+        # Enforced on every invocation, not only at construction time, so a
+        # bridge handed around by an agent still refuses agent sources.
+        assert_phone_boundary(self.source)
+
         if shutil.which(self.binary) is None:
             raise KDEConnectError(
                 f"KDE Connect CLI '{self.binary}' was not found."
@@ -95,15 +105,17 @@ class KDEConnectBridge:
         except subprocess.CalledProcessError as exc:
             message = exc.stderr.strip() or exc.stdout.strip()
 
-            # Defensive: surface the common "No such object path" failure
-            # which typically means the KDE Connect daemon isn't properly
-            # connected to the device (mDNS/network binding issue), not a
-            # problem with the CLI invocation itself.
+            # Defence: "No such object path" is what kdeconnect-cli reports
+            # when the daemon has no plugin object for the device - i.e. the
+            # device is paired but not connected/reachable. That is a
+            # connectivity state, not a broken CLI or a dead D-Bus daemon, and
+            # the advice must say so.
             if "No such object path" in message:
                 message = (
-                    "KDE Connect daemon isn't responding — check the D-Bus "
-                    "service registration and daemon health (mDNS/network "
-                    "binding issue). Original error: " + message
+                    "Device is paired but not connected/reachable — open KDE "
+                    "Connect on the phone, keep both devices on the same "
+                    "network, and re-run `devices` to confirm. Original "
+                    "error: " + message
                 )
 
             raise KDEConnectError(
@@ -111,19 +123,25 @@ class KDEConnectBridge:
                 f"KDE Connect command failed: {' '.join(args)}"
             ) from exc
 
+        if stderr_fallback:
+            # kdeconnect-cli writes "N device(s) found" (and similar
+            # diagnostics) to stderr while stdout stays empty; surface stderr
+            # so `devices`/`available` never print a blank line.
+            return result.stdout.strip() or result.stderr.strip()
+
         return result.stdout.strip()
 
     def version(self) -> str:
         return self._run("--version")
 
     def list_devices(self) -> str:
-        return self._run("--list-devices")
+        return self._run("--list-devices", stderr_fallback=True)
 
     def list_available(self) -> str:
-        return self._run("--list-available")
+        return self._run("--list-available", stderr_fallback=True)
 
     def refresh(self) -> str:
-        return self._run("--refresh")
+        return self._run("--refresh", stderr_fallback=True)
 
     def encryption_info(self, device: str | None = None) -> str:
         args = ["--encryption-info"]
@@ -276,11 +294,16 @@ class KDEConnectBridge:
 
     def list_sms(self, device: str | None = None) -> list[dict]:
         """List SMS messages from the device.
-        
+
         Raises:
-            KDEConnectUnsupportedError: KDE Connect does not support listing SMS messages.
+            KDEConnectUnsupportedError: kdeconnect-cli has no message-listing
+                option (verified against KDE Connect 26.x CLI: only
+                --send-sms exists). The D-Bus conversations plugin may list
+                them, but that path is not implemented here - sending still
+                works.
         """
         raise KDEConnectUnsupportedError(
-            "KDE Connect does not support listing SMS messages. "
-            "Use --send-sms to send messages instead."
+            "Listing messages is not supported by kdeconnect-cli (no "
+            "--list-sms/--messages option). Sending is supported: "
+            "use `sms <destination> <message>`."
         )

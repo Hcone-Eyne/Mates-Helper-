@@ -14,27 +14,41 @@ from phone.bridge.kdeconnect import (
     KDEConnectParseError,
     KDEConnectEmptyError,
 )
+from phone.security.isolation import PhoneIsolationError, assert_phone_boundary
 from phone.security.permission import (
     PhonePermision,
+    PhonePermissionDenied,
     READ_ONLY,
     ACTION_PERMISSION,
     DEFAULT_PERMISSIONS,
+    command_permission,
     permission_label,
     is_allowed,
+    require_permission,
 )
-from phone.events import NotificationEvent, MessageEvent
+
 
 def _permission_symbol(allowed: bool):
     return "✓" if allowed else "○"
 
-def show_permission(bridge: KDEConnectBridge, device: str | None = None):
-    print("\n PHONE PERMISSIONS.")
+
+def show_permission(
+    device: str | None = None,
+    permissions: dict[PhonePermision, bool] | None = None,
+):
+    """Print the local permission policy.
+
+    This screen is local policy only - it is never read from the device, so
+    it must not pretend to report what the phone granted us.
+    """
+    state = DEFAULT_PERMISSIONS if permissions is None else permissions
+
+    print("\n PHONE PERMISSIONS (local policy).")
     print("=" * 40)
+    print("This is the local permission policy, not a readback from the device.")
 
     if device:
-        print(f"Device: {device}")
-    else:
-        print("Device: Default")
+        print(f"Requested device: {device} (not queried)")
 
     print("\nREAD")
     print("-" * 40)
@@ -45,10 +59,66 @@ def show_permission(bridge: KDEConnectBridge, device: str | None = None):
     )
 
     for permission in all_permissions:
-        allowed = is_allowed(permission, DEFAULT_PERMISSIONS)
+        allowed = is_allowed(permission, state)
         print(f"{permission_label(permission):<20}{_permission_symbol(allowed)}")
 
-def main(argv: list[str] | None = None) -> None:
+
+def _handle_messages(
+    bridge: KDEConnectBridge,
+    device: str | None,
+    as_json: bool,
+) -> None:
+    """Shared handler for the `messages` and `list-sms` commands."""
+    try:
+        messages = bridge.list_sms(device)
+    except KDEConnectUnsupportedError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except KDEConnectDeviceError as exc:
+        print(f"Error: Device error - {exc}", file=sys.stderr)
+        sys.exit(1)
+    except KDEConnectPermissionError as exc:
+        print(f"Error: Permission denied - {exc}", file=sys.stderr)
+        sys.exit(1)
+    except KDEConnectParseError as exc:
+        print(f"Error: Failed to parse messages - {exc}", file=sys.stderr)
+        sys.exit(1)
+    except KDEConnectEmptyError:
+        print("No messages found.")
+        return
+    except KDEConnectError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if as_json:
+        print(json.dumps(list(messages), indent=2, default=str))
+        return
+
+    if not messages:
+        print("No messages found.")
+        return
+
+    for message in messages:
+        print(
+            f"[{message.get('id', '?')}] "
+            f"{message.get('sender', 'Unknown')}: {message.get('body', '')}"
+        )
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    source: str = "phone_cli",
+    permissions: dict[PhonePermision, bool] | None = None,
+) -> None:
+    # Isolation boundary: agent-side callers are refused before any device
+    # work (and before argparse can even describe the device commands).
+    try:
+        assert_phone_boundary(source)
+    except PhoneIsolationError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         prog="fox-phone",
         description="Isolated Android ↔ Mac Phone Hub",
@@ -102,6 +172,17 @@ def main(argv: list[str] | None = None) -> None:
     # list lets the main CLI dispatch phone commands without touching sys.argv.
     args = parser.parse_args(argv)
 
+    # Permission enforcement: a permission that is never checked is not a
+    # permission. Every device-touching command declares the permission it
+    # needs and is refused before the bridge is created.
+    required = command_permission(args.command)
+    if required is not None:
+        try:
+            require_permission(required, permissions)
+        except PhonePermissionDenied as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+
     bridge = KDEConnectBridge()
 
     try:
@@ -135,12 +216,11 @@ def main(argv: list[str] | None = None) -> None:
             print(bridge.share_text(args.text, args.device))
 
         elif args.command == "permissions":
-            show_permission(bridge, args.device)
+            show_permission(args.device, permissions)
 
         elif args.command == "notifications":
             notifications = bridge.get_notifications(args.device)
             if args.json:
-                import json
                 print(json.dumps(notifications, indent=2, default=str))
             else:
                 if not notifications:
@@ -152,65 +232,8 @@ def main(argv: list[str] | None = None) -> None:
                         text = n.get('text', n.get('body', ''))
                         print(f"[{n.get('id', '?')}] {app}: {title} - {text}")
 
-        elif args.command == "messages":
-            try:
-                messages = bridge.list_sms(args.device)
-                if args.json:
-                    import json
-                    print(json.dumps(list(messages), indent=2, default=str))
-                else:
-                    if not messages:
-                        print("No messages found.")
-                    else:
-                        for m in messages:
-                            print(f"[{m.get('id', '?')}] {m.get('sender', 'Unknown')}: {m.get('body', '')}")
-            except KDEConnectUnsupportedError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectDeviceError as exc:
-                print(f"Error: Device error - {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectPermissionError as exc:
-                print(f"Error: Permission denied - {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectParseError as exc:
-                print(f"Error: Failed to parse messages - {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectEmptyError:
-                print("No messages found.")
-            except KDEConnectError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                sys.exit(1)
-
-        elif args.command == "list-sms":
-            try:
-                messages = bridge.list_sms(args.device)
-                if args.json:
-                    import json
-                    print(json.dumps(list(messages), indent=2, default=str))
-                else:
-                    if not messages:
-                        print("No messages found.")
-                    else:
-                        for m in messages:
-                            print(f"[{m.get('id', '?')}] {m.get('sender', 'Unknown')}: {m.get('body', '')}")
-            except KDEConnectUnsupportedError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectDeviceError as exc:
-                print(f"Error: Device error - {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectPermissionError as exc:
-                print(f"Error: Permission denied - {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectParseError as exc:
-                print(f"Error: Failed to parse messages - {exc}", file=sys.stderr)
-                sys.exit(1)
-            except KDEConnectEmptyError:
-                print("No messages found.")
-            except KDEConnectError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                sys.exit(1)
+        elif args.command in {"messages", "list-sms"}:
+            _handle_messages(bridge, args.device, args.json)
 
         elif args.command == "sms":
             if not args.destination or not args.message:
