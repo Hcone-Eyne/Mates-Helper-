@@ -3,6 +3,8 @@
 
 import re
 import html
+import ipaddress
+import socket
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -236,12 +238,112 @@ def _web_search(query="", max_results=5):
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Web fetch safety (SSRF guard for the LLM-controlled web_browse tool)
+# ---------------------------------------------------------------------------
+
+_WEB_BROWSE_TIMEOUT = 15
+_WEB_BROWSE_MAX_CHARS = 4000
+
+
+def _ip_is_blocked(address) -> bool:
+    """Return True for loopback, private, link-local, multicast, or
+    unspecified addresses (including IPv4-mapped IPv6 forms)."""
+    candidates = [address]
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        candidates.append(address.ipv4_mapped)
+    return any(
+        candidate.is_loopback
+        or candidate.is_private
+        or candidate.is_link_local
+        or candidate.is_multicast
+        or candidate.is_unspecified
+        for candidate in candidates
+    )
+
+
+def _validate_url_for_fetch(url) -> str | None:
+    """Safety gate for web_browse.
+
+    Returns None when the URL is allowed, otherwise a `[Fox]` error string.
+    Every hostname is resolved and every resolved address is checked - a
+    blocked literal and a hostile DNS answer are refused alike.
+    """
+    if not isinstance(url, str) or not url.strip():
+        return "[Fox]: No URL was provided."
+    try:
+        parsed = urllib.parse.urlsplit(url.strip())
+    except ValueError as exc:
+        return f"[Fox]: URL is not allowed ({exc})."
+    if parsed.scheme.lower() not in ("http", "https"):
+        return "[Fox]: URL is not allowed. Only http:// and https:// addresses can be fetched."
+    if parsed.username or parsed.password:
+        return "[Fox]: URL is not allowed. Credentials must not be embedded in the URL."
+    try:
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        return f"[Fox]: URL is not allowed ({exc})."
+    if not host:
+        return "[Fox]: URL is not allowed. The address has no host."
+    host = host.strip().rstrip(".")
+    if not host:
+        return "[Fox]: URL is not allowed. The address has no host."
+    lowered = host.lower()
+    if lowered == "localhost" or lowered.endswith(".localhost"):
+        return "[Fox]: URL is not allowed (localhost is blocked)."
+    try:
+        literal = ipaddress.ip_address(host.split("%", 1)[0])
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if _ip_is_blocked(literal):
+            return "[Fox]: URL is not allowed (blocked IP address)."
+        return None
+    default_port = 443 if parsed.scheme.lower() == "https" else 80
+    try:
+        infos = socket.getaddrinfo(host, port or default_port, type=socket.SOCK_STREAM)
+    except OSError:
+        return f"[Fox]: URL is not allowed. Could not resolve '{host}'."
+    if not infos:
+        return f"[Fox]: URL is not allowed. Could not resolve '{host}'."
+    for info in infos:
+        try:
+            resolved = ipaddress.ip_address(info[4][0].split("%", 1)[0])
+        except ValueError:
+            return f"[Fox]: URL is not allowed. Could not verify '{host}'."
+        if _ip_is_blocked(resolved):
+            return "[Fox]: URL is not allowed because it resolves to a blocked address."
+    return None
+
+
+class _BlockedURLError(ValueError):
+    """Raised when a redirect target fails URL safety validation."""
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow HTTP redirects only to URLs that pass fetch validation."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urljoin(req.get_full_url(), newurl)
+        error = _validate_url_for_fetch(target)
+        if error is not None:
+            raise _BlockedURLError(error)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _web_browse(url=""):
     """Fetch a URL and return its visible text content (first 4000 chars)."""
+    blocked = _validate_url_for_fetch(url)
+    if blocked is not None:
+        return blocked
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        opener = urllib.request.build_opener(_SafeRedirectHandler())
+        with opener.open(req, timeout=_WEB_BROWSE_TIMEOUT) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
+    except _BlockedURLError as exc:
+        return str(exc)
     except Exception as e:
         return f"[Fox]: Could not fetch '{url}': {e}"
 
@@ -255,7 +357,7 @@ def _web_browse(url=""):
     if not text:
         return f"[Fox]: Page at '{url}' returned empty content."
 
-    return text[:4000] + ("..." if len(text) > 4000 else "")
+    return text[:_WEB_BROWSE_MAX_CHARS] + ("..." if len(text) > _WEB_BROWSE_MAX_CHARS else "")
 
 
 _register(
