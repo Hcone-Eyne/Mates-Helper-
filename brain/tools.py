@@ -41,6 +41,10 @@ TOOLS = [
 
 # this function is like a bridge of agent and tools using this agent can use those tools!
 def dispatcher(tool_name: str, tool_input: dict):
+    # Lazily import the agent tool registry: it pulls in pandas, which the
+    # schedule/finance tools need but the browse-only path does not.
+    from agent.ollama import tools as agent_tools
+
     # conditions based on tools and actions!
     if tool_name == "browse":
         resp = requests.post(
@@ -53,12 +57,19 @@ def dispatcher(tool_name: str, tool_input: dict):
         return f"Title: {data['title']}\n\n{data['text']}"
 
     if tool_name == "finance_calculate":
-        # TODO: reuse / import the finance_bot function
-        return f"[Fox]: Finance_Bot - In Progress....."
+        # Reuses the agent-side implementation (operation_finder + memory)
+        # instead of returning a placeholder.
+        return agent_tools.dispatch(
+            "finance_calculate",
+            expression=tool_input.get("expression", ""),
+        )
 
     if tool_name == "schedule_view":
-        # TODO: Again reuse / import the schedule_BOT function
-        return f"[Fox]: Schedule_Bot - In Progress....."
+        # A query routes to schedule_ask; no query means "show everything".
+        query = str(tool_input.get("query") or "").strip()
+        if query:
+            return agent_tools.dispatch("schedule_ask", query=query)
+        return agent_tools.dispatch("schedule_view")
 
     # other option if those conditions aren't satisfied.....
     return f"Unknown tool: {tool_name}"

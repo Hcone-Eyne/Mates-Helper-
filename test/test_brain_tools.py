@@ -89,15 +89,40 @@ class TestDispatcher:
         with pytest.raises(requests.ConnectionError):
             dispatcher("browse", {"url": "https://example.com"})
 
-    def test_dispatch_finance_calculate(self):
-        # Currently returns placeholder
-        result = dispatcher("finance_calculate", {"expression": "2+2"})
-        assert "In Progress" in result or "Finance_Bot" in result
+    def test_dispatch_finance_calculate_reuses_finance_bot(self):
+        # Delegates to the agent-side registry instead of returning a
+        # placeholder - this is the real operation_finder path.
+        from Memory.memory_storer import memory_log
 
-    def test_dispatch_schedule_view(self):
-        # Currently returns placeholder
+        saved = list(memory_log)
+        try:
+            result = dispatcher("finance_calculate", {"expression": "2+2"})
+            assert result == "[Fox]: Result -> 4"
+            assert "In Progress" not in result
+        finally:
+            memory_log[:] = saved
+
+    def test_dispatch_schedule_view_runs_a_real_query(self):
         result = dispatcher("schedule_view", {"query": "today"})
-        assert "In Progress" in result or "Schedule_Bot" in result
+        assert "In Progress" not in result
+        assert "Schedule_Bot" not in result
+        # query_handler answers in plain language for an empty day
+        assert isinstance(result, str)
+        assert result.strip()
+
+    def test_dispatch_schedule_view_routes_query_to_schedule_ask(self):
+        with patch("agent.ollama.tools.dispatch") as mock_dispatch:
+            mock_dispatch.return_value = "[Fox]: asked"
+            result = dispatcher("schedule_view", {"query": "monday"})
+        mock_dispatch.assert_called_once_with("schedule_ask", query="monday")
+        assert result == "[Fox]: asked"
+
+    def test_dispatch_schedule_view_without_query_lists_everything(self):
+        with patch("agent.ollama.tools.dispatch") as mock_dispatch:
+            mock_dispatch.return_value = "[Fox]: full"
+            result = dispatcher("schedule_view", {})
+        mock_dispatch.assert_called_once_with("schedule_view")
+        assert result == "[Fox]: full"
 
     def test_dispatch_unknown_tool(self):
         result = dispatcher("unknown_tool", {})
