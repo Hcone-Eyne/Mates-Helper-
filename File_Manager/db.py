@@ -113,8 +113,40 @@ def _remove_missing_files(root, seen_paths):
     return removed
  
  
+def _fts_safe_query(query):
+    """Build a safe FTS5 MATCH expression from raw user input.
+
+    The Vault search contract is keyword search: whitespace-separated terms
+    are ANDed, and a trailing `*` requests prefix matching. Every term is
+    double-quoted (with embedded quotes doubled) so FTS operators, quotes,
+    parentheses, column filters, and other syntax in user input are matched
+    literally - they can never change query semantics or raise syntax
+    errors. Returns None when the input contains no searchable terms.
+    """
+    if not query or not str(query).strip():
+        return None
+
+    terms = []
+    for raw in str(query).split():
+        prefix = raw.endswith("*")
+        stem = raw.replace("*", "").replace("^", "")
+        if not stem:
+            continue
+        safe = '"' + stem.replace('"', '""') + '"'
+        if prefix:
+            safe += "*"
+        terms.append(safe)
+
+    if not terms:
+        return None
+    return " ".join(terms)
+
+
 def search_files(query, limit=10):
     # cmd: search_files("report", 5)
+    match_query = _fts_safe_query(query)
+    if not match_query:
+        return []
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
@@ -122,7 +154,7 @@ def search_files(query, limit=10):
           FROM files_fts JOIN files ON files.id = files_fts.rowid
           WHERE files_fts MATCH ? ORDER BY rank LIMIT ?
         """,
-        (query, limit),
+        (match_query, limit),
     )
  
     results = [dict(row) for row in cur.fetchall()]

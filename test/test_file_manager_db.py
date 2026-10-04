@@ -206,7 +206,8 @@ class TestDB:
         assert len(docs) == 1
         assert docs[0]["category"] == "Documents"
 
-    @pytest.mark.xfail(reason="Bug in get_file: uses conn.execute instead of cur.execute")
+    # Regression: get_file used to call conn.execute instead of cur.execute,
+    # which raised on SQLite connections - fixed, so this is a normal test now.
     def test_get_file_existing(self):
         root = Path(self.temp_dir.name).resolve()
         test_file = (root / "test.txt").resolve()
@@ -290,9 +291,11 @@ class TestDBEdgeCases:
         assert file_id == 1
 
     def test_search_empty_query(self):
-        # search_files with empty query raises sqlite error - this is expected behavior
-        with pytest.raises(Exception):
-            db.search_files("", limit=10)
+        # Blank input carries no searchable terms, so it returns no results
+        # instead of raising an FTS5 syntax error (which used to surface as
+        # HTTP 500 on callers that reach db.search_files directly, like MCP).
+        assert db.search_files("", limit=10) == []
+        assert db.search_files("   ", limit=10) == []
 
     def test_concurrent_connections(self):
         # Multiple connections should work
