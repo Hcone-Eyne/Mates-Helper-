@@ -1,16 +1,27 @@
 # this program is about exposing the file management features to Fox!
 
 # importing the nessary modules
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from brain.auth import require_api_token
 
 from .. import scanner, search
 from .. import modify_files
 
 # initialising the router
+# (public: health checks and read-only search/list - no writes, no data loss)
 router = APIRouter(
     prefix = "/files",
     tags = ["File Manager"]
+)
+
+# Mutating file routes share ONE centralized auth dependency applied to the
+# whole router - no route performs its own token check.
+mutations = APIRouter(
+    prefix = "/files",
+    tags = ["File Manager"],
+    dependencies = [Depends(require_api_token)],
 )
 
 # creating a class for move request of file
@@ -44,7 +55,7 @@ def health():
         "service":"file-manager"
     }
 
-@router.post("/scan")
+@mutations.post("/scan")
 # this function is used to call the scan function to scan the file and store
 def scan_files():
     return scanner.scan()
@@ -64,7 +75,7 @@ def list_files(category:str |None = None, limit:int = 100):
         "result":search.list_files (category, limit)
     }
 
-@router.post("/move")
+@mutations.post("/move")
 # this function is used to call a function to move a file
 def move_file(req: MoveRequest):
     try:
@@ -82,7 +93,7 @@ def move_file(req: MoveRequest):
             detail  = str(e)
         )
 
-@router.post("/copy")
+@mutations.post("/copy")
 # this function ahhh, call the copy funtion to create a copy mechanism!
 def copy_files(req: CopyRequest):
     try:
@@ -100,7 +111,7 @@ def copy_files(req: CopyRequest):
             detail=str(e)
         )
 
-@router.post("/rename")
+@mutations.post("/rename")
 # this function calls the function to rename a file.....
 def rename_file(req: RenameRequest):
     try:
@@ -118,7 +129,7 @@ def rename_file(req: RenameRequest):
             detail = str(e)
         )
 
-@router.post("/delete")
+@mutations.post("/delete")
 # this function calls the function to delete a file in file manager
 def delete_file(req: DeleteRequest):
     try:
@@ -132,7 +143,7 @@ def delete_file(req: DeleteRequest):
             detail=str(exc)
         )
 
-@router.post("/folder")
+@mutations.post("/folder")
 # this function calls the function to create a file in file manager
 def create_folder(req: CreateFolderRequest):
     try:

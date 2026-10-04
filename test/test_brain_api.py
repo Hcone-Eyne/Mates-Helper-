@@ -15,12 +15,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 fastapi = pytest.importorskip("fastapi")
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
+TEST_TOKEN = "test-token"
+AUTH = {"X-API-Token": TEST_TOKEN}
+WRONG_AUTH = {"X-API-Token": "wrong-token"}
+
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     from brain import task_store
 
     monkeypatch.setattr(task_store, "DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("FOX_API_TOKEN", TEST_TOKEN)
 
     brain_app = pytest.importorskip("brain.app")
     return TestClient(brain_app.app)
@@ -37,7 +42,8 @@ class TestTaskApi:
         monkeypatch.setattr("brain.app.run_task", lambda desc, provider: "done: " + desc)
 
         response = client.post(
-            "/submit_task", json={"description": "list files", "provider": "ollama"}
+            "/submit_task", json={"description": "list files", "provider": "ollama"},
+            headers=AUTH,
         )
 
         assert response.status_code == 200
@@ -47,9 +53,9 @@ class TestTaskApi:
 
     def test_tasks_endpoint_lists_submitted_work(self, client, monkeypatch):
         monkeypatch.setattr("brain.app.run_task", lambda desc, provider: "ok")
-        client.post("/submit_task", json={"description": "hello"})
+        client.post("/submit_task", json={"description": "hello"}, headers=AUTH)
 
-        response = client.get("/tasks")
+        response = client.get("/tasks", headers=AUTH)
 
         assert response.status_code == 200
         entries = response.json()
@@ -57,7 +63,7 @@ class TestTaskApi:
         assert entries[0]["status"] == "done"
 
     def test_submit_task_rejects_missing_description(self, client):
-        response = client.post("/submit_task", json={})
+        response = client.post("/submit_task", json={}, headers=AUTH)
         assert response.status_code == 422
 
     def test_task_store_database_path_is_configurable(self):
@@ -79,9 +85,10 @@ class TestTaskApi:
             client.post(
                 "/submit_task",
                 json={"description": "doomed", "provider": "ollama"},
+                headers=AUTH,
             )
 
-        entry = client.get("/tasks").json()[0]
+        entry = client.get("/tasks", headers=AUTH).json()[0]
         assert entry["status"] == "failed"
         assert "llm unavailable" in entry["result"]
 
@@ -90,9 +97,9 @@ class TestTaskApi:
             "brain.app.run_task", lambda description, provider: "all good"
         )
 
-        client.post("/submit_task", json={"description": "fine", "provider": "ollama"})
+        client.post("/submit_task", json={"description": "fine", "provider": "ollama"}, headers=AUTH)
 
-        entry = client.get("/tasks").json()[0]
+        entry = client.get("/tasks", headers=AUTH).json()[0]
         assert entry["status"] == "done"
         assert entry["result"] == "all good"
 
@@ -121,7 +128,7 @@ class TestDestructiveFileEndpointIsConfined:
         outside = tmp_path / "not-in-the-vault.txt"
         outside.write_text("keep me")
 
-        response = client.post("/files/delete", json={"path": str(outside)})
+        response = client.post("/files/delete", json={"path": str(outside)}, headers=AUTH)
 
         assert response.status_code == 400
         assert "outside the File Manager Vault" in response.json()["detail"]
@@ -137,13 +144,93 @@ class TestDestructiveFileEndpointIsConfined:
         victim.write_text("temp")
 
         try:
-            response = client.post("/files/delete", json={"path": str(victim)})
+            response = client.post("/files/delete", json={"path": str(victim)}, headers=AUTH)
             assert response.status_code == 200
             assert response.json()["success"] is True
             assert not victim.exists()
         finally:
             if victim.exists():
                 victim.unlink()
+
+
+class TestApiAuthorization:
+    """Every mutating/task route requires the server-side API token.
+
+    Health endpoints stay public. A missing server token, a missing client
+    header, and a wrong token must all fail closed with HTTP 401 - and an
+    unauthenticated delete must leave the Vault file untouched.
+    """
+
+    def test_unauthenticated_submit_task_is_rejected(self, client):
+        response = client.post("/submit_task", json={"description": "hello"})
+        assert response.status_code == 401
+        assert TEST_TOKEN not in response.text
+
+    def test_unauthenticated_tasks_is_rejected(self, client):
+        assert client.get("/tasks").status_code == 401
+
+    def test_unauthenticated_file_mutation_is_rejected(self, client, tmp_path):
+        victim = tmp_path / "keep-me.txt"
+        victim.write_text("keep me")
+
+        for path, payload in [
+            ("/files/delete", {"path": str(victim)}),
+            ("/files/move", {"source": str(victim), "destination": str(victim)}),
+            ("/files/copy", {"source": str(victim), "destination": str(victim)}),
+            ("/files/rename", {"source": str(victim), "new_name": "x.txt"}),
+            ("/files/folder", {"path": str(tmp_path / "new-dir")}),
+            ("/files/scan", None),
+        ]:
+            response = client.post(path, json=payload) if payload is not None else client.post(path)
+            assert response.status_code == 401, path
+            assert TEST_TOKEN not in response.text
+
+        assert victim.exists(), "unauthenticated delete must not touch the file"
+
+    def test_invalid_token_is_rejected(self, client, tmp_path):
+        victim = tmp_path / "keep-me.txt"
+        victim.write_text("keep me")
+
+        assert client.post(
+            "/submit_task", json={"description": "hello"}, headers=WRONG_AUTH
+        ).status_code == 401
+        assert client.get("/tasks", headers=WRONG_AUTH).status_code == 401
+        assert client.post(
+            "/files/delete", json={"path": str(victim)}, headers=WRONG_AUTH
+        ).status_code == 401
+        assert victim.exists(), "wrong-token delete must not touch the file"
+
+    def test_unconfigured_server_token_fails_closed(self, client, monkeypatch):
+        monkeypatch.delenv("FOX_API_TOKEN", raising=False)
+
+        assert client.post(
+            "/submit_task", json={"description": "hello"}, headers=AUTH
+        ).status_code == 401
+        assert client.get("/tasks", headers=AUTH).status_code == 401
+
+    def test_health_endpoints_remain_public(self, client):
+        assert client.get("/health").status_code == 200
+        assert client.get("/files/health").status_code == 200
+
+    def test_authenticated_mutation_still_works(self, client, tmp_path, monkeypatch):
+        import File_Manager.db as file_db
+        from File_Manager.organizer import VAULT_ROOT
+
+        monkeypatch.setattr(file_db, "DB_PATH", str(tmp_path / "index.db"))
+        VAULT_ROOT.mkdir(parents=True, exist_ok=True)
+        target = VAULT_ROOT / "_brain_api_auth_test_dir"
+        if target.exists():
+            import shutil
+            shutil.rmtree(target)
+
+        try:
+            response = client.post("/files/folder", json={"path": str(target)}, headers=AUTH)
+            assert response.status_code == 200
+            assert target.is_dir()
+        finally:
+            if target.exists():
+                import shutil
+                shutil.rmtree(target)
 
 
 if __name__ == "__main__":

@@ -32,19 +32,27 @@ services:
     # the lockdown in entrypoint.sh only restricts OUTBOUND traffic.
 
   brain:
-    build: ./brain
+    # The brain image also needs File_Manager/ and agent/ (see brain/Dockerfile),
+    # which sit outside ./brain, so the build context is the repository root.
+    build:
+      context: .
+      dockerfile: brain/Dockerfile
     container_name: sandbox-brain
     depends_on:
       - agent
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - FOX_API_TOKEN=${FOX_API_TOKEN}
       - AGENT_HOST=agent
       - AGENT_PORT=9000
     volumes:
       - ./data:/data
     ports:
-      - "7010:7000"
+      - "127.0.0.1:7010:7000"
       # entry point: POST /submit_task, GET /tasks
+      # Loopback only: the API is token-gated (FOX_API_TOKEN) and
+      # /files/delete permanently removes files inside the Vault, so it
+      # must not be reachable from the LAN even with auth in front of it.
     networks:
       - sandbox-net
     # Normal network access — this is the "brain," not the sandboxed

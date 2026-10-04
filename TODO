@@ -1,14 +1,50 @@
+# TODO
 
-#TODO:  need to add cli based graph 
+Status: updated after the audit pass. Items marked [DONE] are implemented and
+covered by tests; the rest are real, still-open work.
 
-Agent_Plugins
-Ports and Other Stuffs Are hardcoded ru, have to fix them!
+## Open
 
-ALSo Cli is like reprinting itsself again and agin, need to fix that!
+- [ ] Need to add a cli based graph (Agent_Plugins)
+- [ ] Some ports are still hardcoded defaults: mitm-proxy :8080, agent :9000,
+      gateway :8765, brain publishes 7010->7000. OLLAMA_HOST, AGENT_HOST,
+      AGENT_PORT, AGENT_GATEWAY_*, ANTHROPIC_MODEL and FOX_TASK_DB_PATH are
+      already overridable by env. FOX_API_TOKEN is required in the environment
+      for the protected Brain/File Manager API (sent as the X-API-Token
+      header); without it every protected endpoint fails closed with 401.
+- [ ] Cli still calls `os.system('clear')` before each menu redraw; if a
+      terminal does not support it the menu reprints over itself.
+- [ ] `File_Manager/modify_files.py::delete_file` still deletes permanently
+      (Vault-scoped). The Fox Club pipeline has trash/restore through
+      agent/fox/runtime/executor.py; the Vault HTTP API (/files/delete) has
+      no trash. Reuse that trash implementation rather than writing a second
+      one.
+- [ ] `brain/Dockerfile` only copies app.py, orchestrator.py, tools.py and
+      task_store.py, but brain/app.py imports File_Manager and
+      brain/orchestrator.py imports the agent package - the brain image as
+      written cannot import its own app. Needs a build context fix and a
+      `docker compose up` run to verify (Docker engine was not running during
+      the audit).
+- [ ] Phone: message listing is not implemented (kdeconnect-cli has no
+      option). D-Bus conversations plugin is the possible path.
 
-Tools.py
-# TODO: reuse / import the finance_bot function
- # TODO: Again reuse / import the schedule_BOT function
+## Done
 
- modify_files.py
- # Todo: This is Permanent Deletion of file, add trash bin feature!k
+- [DONE] Tools.py: brain/tools.py now delegates finance_calculate and
+      schedule_view to the agent-side registry instead of returning
+      "In Progress" placeholders (test/test_brain_tools.py).
+- [DONE] Phone permission system is enforced (require_permission at the CLI
+      entry point, PhonePermissionDenied), not just displayed
+      (test/test_phone_enforcement.py).
+- [DONE] Phone isolation boundary is enforced from phone_cli.main() and from
+      KDEConnectBridge (construction and every call).
+- [DONE] Misleading "daemon isn't responding" message, blank `devices`
+      output, and the hub panel's false "read from the phone" claim fixed.
+- [DONE] Fox Club runtime no longer roots its executor at the repo directory
+      (target_dir unset -> Fox Space).
+- [DONE] ANTHROPIC_MODEL is env-configurable; duplicate CURRENT_PROVIDER
+      removed; task store DB path overridable (FOX_TASK_DB_PATH).
+- [DONE] Dead files removed: utils.py (empty), no_heart_script.py (unused
+      and broken: `set.root` in __init__).
+- [DONE] stress_test.py imported _UnavailableExecutor from the wrong module
+      (2 tests failed before reaching their assertions).
