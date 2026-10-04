@@ -14,6 +14,8 @@ except ModuleNotFoundError:  # pragma: no cover - optional visualization depende
 from rich.console import Console
 from rich.panel import Panel
 
+from File_Manager.organizer import VAULT_ROOT
+
 # setting up the console
 console = Console()
 
@@ -31,14 +33,54 @@ PEOPLE_RULE = {
 }
 
 
+# Approved root for finance statements.
+#
+# Statements are user files, and the File Manager Vault is this repository's
+# designated user-file area (new arrivals are filed through Vault/Inbox).
+# Confining statement reads to the Vault keeps the LLM- and MCP-controlled
+# paths from reaching arbitrary files. The Fox security boundary is NOT
+# reused here: it governs Fox Space managed directories, not the Vault,
+# and must not be weakened to make Finance Bot work.
+STATEMENT_ROOT = VAULT_ROOT
+
+
+def _resolve_inside_statements(path):
+    """Canonicalize a statement path and confine it to the approved root.
+
+    Uses real-path resolution plus containment (never string-prefix
+    comparison), so `..` traversal and symlink escapes are rejected.
+    Fails closed when the approved root itself is missing or invalid.
+    """
+    try:
+        resolved_root = Path(STATEMENT_ROOT).expanduser().resolve()
+    except OSError as exc:
+        raise ValueError("[Fox]: Approved Finance directory is unavailable.") from exc
+    if not resolved_root.is_dir():
+        raise ValueError("[Fox]: Approved Finance directory is unavailable.")
+
+    try:
+        resolved = Path(path).expanduser().resolve()
+    except OSError as exc:
+        raise ValueError("[Fox]: Could not resolve the statement path.") from exc
+
+    try:
+        resolved.relative_to(resolved_root)
+    except ValueError:
+        raise ValueError(
+            "[Fox]: Statement path is outside the approved Finance directory. "
+            "Place the file inside the File Manager Vault and try again."
+        ) from None
+    return resolved
+
+
 # this function converts a PDF or CSV statement into a normalized DataFrame
 def load_statement(path: str) -> pd.DataFrame:
     """Load a bank/GPay statement (.csv or .pdf) into a normalized
     DataFrame with columns: date, description, amount (signed —
     negative = spend, positive = received)."""
 
-    # defining the path
-    path = Path(path)
+    # confine the path to the approved root before touching the filesystem
+    path = _resolve_inside_statements(path)
 
     # this condition checks if the path is PDF or CSV
     if path.suffix.lower() == ".csv":
