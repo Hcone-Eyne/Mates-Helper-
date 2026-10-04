@@ -85,10 +85,20 @@ class TestPhoneIsolation:
         assert_phone_boundary("system")
         assert_phone_boundary("phone_cli")
         assert_phone_boundary("kdeconnect")
-        assert_phone_boundary("")
 
-    def test_empty_string_allowed(self):
-        assert_phone_boundary("")
+    def test_empty_string_refused(self):
+        with pytest.raises(PhoneIsolationError):
+            assert_phone_boundary("")
+
+    def test_none_source_refused(self):
+        with pytest.raises(PhoneIsolationError):
+            assert_phone_boundary(None)
+
+    def test_whitespace_only_source_refused(self):
+        with pytest.raises(PhoneIsolationError):
+            assert_phone_boundary("   ")
+        with pytest.raises(PhoneIsolationError):
+            assert_phone_boundary("\t\n")
 
     def test_phone_isolation_error_is_permission_error(self):
         assert issubclass(PhoneIsolationError, PermissionError)

@@ -16,12 +16,18 @@ class PhoneIsolationError(PermissionError):
 # This is deliberately an allowlist. The boundary used to deny a fixed list of
 # agent names and trust everything else, so any caller could invent a source
 # label that had never been audited. Anything not enumerated here is refused.
+#
+# Callers must declare an explicit identity: a missing, empty, or
+# whitespace-only source is refused, never treated as a trusted default.
+#
+# NOTE: this enforcement is process-local (declared label + call-stack
+# inspection). It is not OS-level isolation, authentication, IPC security,
+# or cross-process security.
 _TRUSTED_SOURCES = frozenset({
     "phone_cli",
     "system",
     "user",
     "kdeconnect",
-    "",  # historical default: callers that never declared a source
 })
 
 # Package directories in this repository that belong to the agent side.
@@ -82,6 +88,8 @@ def assert_phone_boundary(source: str):
 
     1. The declared ``source`` must be one of the allowlisted identities -
        unknown or untrusted labels are refused, not merely known agent names.
+       A missing, empty, or whitespace-only source is refused: there is no
+       trusted default identity.
     2. The actual call stack must not originate inside an agent-side package,
        so a caller cannot simply label itself ``phone_cli``.
     """

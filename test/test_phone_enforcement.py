@@ -38,7 +38,10 @@ from phone.security.permission import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-ALLOWED_SOURCES = ["phone_cli", "system", "user", "kdeconnect", "", "   "]
+ALLOWED_SOURCES = ["phone_cli", "system", "user", "kdeconnect"]
+# A caller that fails to identify itself must fail closed: there is no
+# trusted default identity, so missing/empty/blank labels are refused.
+MISSING_SOURCES = ["", "   ", "\t\n", None]
 AGENT_SOURCES = [
     "fox",
     "FOX",
@@ -270,6 +273,24 @@ class TestUntrustedSourcesAndAgentCallers:
     def test_agent_labels_are_still_refused(self, source):
         with pytest.raises(PhoneIsolationError, match="isolated"):
             assert_phone_boundary(source)
+
+    @pytest.mark.parametrize("source", MISSING_SOURCES)
+    def test_missing_source_is_refused(self, source):
+        with pytest.raises(PhoneIsolationError, match="isolated"):
+            assert_phone_boundary(source)
+
+    def test_cli_exits_before_building_a_bridge_for_a_missing_source(self, capsys):
+        with patch("phone.phone_cli.phone_cli.KDEConnectBridge") as bridge:
+            with pytest.raises(SystemExit) as exc:
+                phone_cli.main(["status"], source="")
+
+        assert exc.value.code == 1
+        assert "isolated" in capsys.readouterr().err
+        bridge.assert_not_called()
+
+    def test_bridge_construction_refuses_a_missing_source(self):
+        with pytest.raises(PhoneIsolationError):
+            KDEConnectBridge(source="")
 
     def test_cli_exits_before_building_a_bridge_for_an_untrusted_source(self, capsys):
         with patch("phone.phone_cli.phone_cli.KDEConnectBridge") as bridge:
