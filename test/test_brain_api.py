@@ -7,6 +7,7 @@ to a temp database so nothing touches /data.
 
 import os
 import sys
+import time
 
 import pytest
 
@@ -18,6 +19,22 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 TEST_TOKEN = "test-token"
 AUTH = {"X-API-Token": TEST_TOKEN}
 WRONG_AUTH = {"X-API-Token": "wrong-token"}
+
+
+def _wait_for_status(client, task_id, states, timeout=10):
+    """Poll GET /tasks until the task reaches one of the given states.
+
+    Execution is detached from the request, so tests synchronize on
+    persisted state with a bounded deadline instead of arbitrary sleeps.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        entries = client.get("/tasks", headers=AUTH).json()
+        match = next((e for e in entries if e["id"] == task_id), None)
+        if match is not None and match["status"] in states:
+            return match
+        time.sleep(0.05)
+    pytest.fail(f"task {task_id} never reached {states}")
 
 
 @pytest.fixture()
@@ -39,28 +56,41 @@ class TestTaskApi:
         assert response.json() == {"status": "ok"}
 
     def test_submit_task_records_and_runs(self, client, monkeypatch):
-        monkeypatch.setattr("brain.app.run_task", lambda desc, provider: "done: " + desc)
+        calls = []
+        started = time.time()
+
+        def slow_run(description, provider):
+            calls.append((description, provider))
+            return "done: " + description
+
+        monkeypatch.setattr("brain.app.run_task", slow_run)
 
         response = client.post(
             "/submit_task", json={"description": "list files", "provider": "ollama"},
             headers=AUTH,
         )
 
-        assert response.status_code == 200
+        # The request returns without waiting for the agent run: the result
+        # is not in the response, and run_task has not necessarily run yet.
+        assert response.status_code == 202
         body = response.json()
-        assert body["result"] == "done: list files"
         assert isinstance(body["id"], int)
+        assert body["status"] == "queued"
+        assert time.time() - started < 5
+        assert "result" not in body
+
+        entry = _wait_for_status(client, body["id"], ("completed",))
+        assert entry["result"] == "done: list files"
+        assert calls == [("list files", "ollama")]
 
     def test_tasks_endpoint_lists_submitted_work(self, client, monkeypatch):
         monkeypatch.setattr("brain.app.run_task", lambda desc, provider: "ok")
-        client.post("/submit_task", json={"description": "hello"}, headers=AUTH)
+        task_id = client.post("/submit_task", json={"description": "hello"}, headers=AUTH).json()["id"]
 
-        response = client.get("/tasks", headers=AUTH)
+        entry = _wait_for_status(client, task_id, ("completed",))
 
-        assert response.status_code == 200
-        entries = response.json()
-        assert entries[0]["description"] == "hello"
-        assert entries[0]["status"] == "done"
+        assert entry["description"] == "hello"
+        assert entry["result"] == "ok"
 
     def test_submit_task_rejects_missing_description(self, client):
         response = client.post("/submit_task", json={}, headers=AUTH)
@@ -73,23 +103,21 @@ class TestTaskApi:
         assert "FOX_TASK_DB_PATH" in open(task_store.__file__).read()
 
     def test_a_failed_run_task_is_not_left_pending(self, client, monkeypatch):
-        # submit_task used to wrap run_task in try/except/raise while only
-        # ever calling complete_task on success, so a provider crash left the
-        # task stuck at "pending" with no explanation.
+        # A provider crash used to propagate through the request; now the
+        # request already returned, so the failure must land in the task row
+        # instead of escaping (or stranding the task short of terminal).
         def explode(description, provider):
             raise RuntimeError("llm unavailable")
 
         monkeypatch.setattr("brain.app.run_task", explode)
 
-        with pytest.raises(RuntimeError):
-            client.post(
-                "/submit_task",
-                json={"description": "doomed", "provider": "ollama"},
-                headers=AUTH,
-            )
+        task_id = client.post(
+            "/submit_task",
+            json={"description": "doomed", "provider": "ollama"},
+            headers=AUTH,
+        ).json()["id"]
 
-        entry = client.get("/tasks", headers=AUTH).json()[0]
-        assert entry["status"] == "failed"
+        entry = _wait_for_status(client, task_id, ("failed",))
         assert "llm unavailable" in entry["result"]
 
     def test_a_successful_run_task_is_still_marked_done(self, client, monkeypatch):
@@ -97,10 +125,10 @@ class TestTaskApi:
             "brain.app.run_task", lambda description, provider: "all good"
         )
 
-        client.post("/submit_task", json={"description": "fine", "provider": "ollama"}, headers=AUTH)
+        task_id = client.post("/submit_task", json={"description": "fine", "provider": "ollama"}, headers=AUTH).json()["id"]
 
-        entry = client.get("/tasks", headers=AUTH).json()[0]
-        assert entry["status"] == "done"
+        entry = _wait_for_status(client, task_id, ("completed",))
+        assert entry["status"] == "completed"
         assert entry["result"] == "all good"
 
 
@@ -231,6 +259,103 @@ class TestApiAuthorization:
             if target.exists():
                 import shutil
                 shutil.rmtree(target)
+
+
+class TestTaskCancellation:
+    """POST /tasks/{id}/cancel only cancels tasks that never started.
+
+    Running tasks are honestly refused with 409: worker threads are never
+    force-killed, so cancellation must not pretend to stop them.
+    """
+
+    def test_cancel_queued_task(self, client, monkeypatch):
+        import threading
+
+        from brain import worker as task_worker
+
+        # One worker slot: the first task holds it so the second stays queued.
+        task_worker.shutdown()
+        monkeypatch.setenv("FOX_TASK_MAX_WORKERS", "1")
+        release = threading.Event()
+
+        def first(desc, provider):
+            release.wait(10)
+            return "first"
+
+        monkeypatch.setattr("brain.app.run_task", first)
+
+        first = client.post("/submit_task", json={"description": "first"}, headers=AUTH).json()["id"]
+        _wait_for_status(client, first, ("running",))
+        second = client.post("/submit_task", json={"description": "second"}, headers=AUTH).json()["id"]
+
+        response = client.post(f"/tasks/{second}/cancel", headers=AUTH)
+        assert response.status_code == 200
+        assert response.json() == {"id": second, "status": "cancelled"}
+
+        release.set()
+        assert _wait_for_status(client, first, ("completed",))["result"] == "first"
+        # the cancelled task never ran and stays cancelled
+        entry = _wait_for_status(client, second, ("cancelled",))
+        assert entry["status"] == "cancelled"
+
+    def test_cancel_running_task_is_rejected(self, client, monkeypatch):
+        import threading
+
+        from brain import worker as task_worker
+
+        task_worker.shutdown()
+        monkeypatch.setenv("FOX_TASK_MAX_WORKERS", "1")
+        release = threading.Event()
+
+        def running(desc, provider):
+            release.wait(10)
+            return "done"
+
+        monkeypatch.setattr("brain.app.run_task", running)
+
+        task_id = client.post("/submit_task", json={"description": "run"}, headers=AUTH).json()["id"]
+        _wait_for_status(client, task_id, ("running",))
+
+        try:
+            response = client.post(f"/tasks/{task_id}/cancel", headers=AUTH)
+            assert response.status_code == 409
+        finally:
+            release.set()
+        assert _wait_for_status(client, task_id, ("completed",))["result"] == "done"
+
+    def test_cancel_missing_task_is_404(self, client):
+        assert client.post("/tasks/999999/cancel", headers=AUTH).status_code == 404
+
+    def test_cancel_completed_task_is_rejected(self, client, monkeypatch):
+        monkeypatch.setattr("brain.app.run_task", lambda desc, provider: "ok")
+        task_id = client.post("/submit_task", json={"description": "quick"}, headers=AUTH).json()["id"]
+        _wait_for_status(client, task_id, ("completed",))
+
+        response = client.post(f"/tasks/{task_id}/cancel", headers=AUTH)
+        assert response.status_code == 409
+
+    def test_unauthenticated_cancel_is_rejected(self, client):
+        assert client.post("/tasks/1/cancel").status_code == 401
+
+
+class TestLifespan:
+    """Startup/shutdown hooks run cleanly and reconcile orphaned rows."""
+
+    def test_lifespan_recovers_interrupted_rows(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        import brain.app as brain_app
+        from brain import task_store
+
+        monkeypatch.setattr(task_store, "DB_PATH", str(tmp_path / "tasks.db"))
+        monkeypatch.setenv("FOX_API_TOKEN", TEST_TOKEN)
+
+        orphan = task_store.add_task("orphan")
+        assert task_store.claim_task(orphan) is True
+
+        with TestClient(brain_app.app) as live:
+            assert live.get("/health").status_code == 200
+            assert task_store.get_task(orphan)["status"] == "failed"
 
 
 if __name__ == "__main__":

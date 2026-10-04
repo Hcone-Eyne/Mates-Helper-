@@ -48,7 +48,7 @@ class TestTaskStore:
         row = cur.fetchone()
         assert row[1] == "Test task description"
         assert row[2] is None  # result
-        assert row[3] == "pending"  # status
+        assert row[3] == "queued"  # status
         assert row[4] is not None  # created_at
         conn.close()
 
@@ -72,7 +72,7 @@ class TestTaskStore:
         cur.execute("SELECT result, status FROM tasks WHERE id=?", (task_id,))
         row = cur.fetchone()
         assert row[0] == "Task completed successfully"
-        assert row[1] == "done"
+        assert row[1] == "completed"
         conn.close()
 
     def test_complete_nonexistent_task(self):
@@ -94,8 +94,8 @@ class TestTaskStore:
         assert tasks[1]["id"] == 1
         assert tasks[0]["description"] == "Task 2"
         assert tasks[1]["description"] == "Task 1"
-        assert tasks[0]["status"] == "pending"
-        assert tasks[1]["status"] == "done"
+        assert tasks[0]["status"] == "queued"
+        assert tasks[1]["status"] == "completed"
         assert tasks[1]["result"] == "Done"
 
     def test_list_tasks_empty(self):
@@ -146,10 +146,10 @@ class TestDefaultDbPath:
         monkeypatch.setattr(task_store, "DB_PATH", task_store.default_db_path())
 
         task_id = task_store.add_task("host run")
-        assert task_store.list_task()[0]["status"] == "pending"
+        assert task_store.list_task()[0]["status"] == "queued"
 
         task_store.complete_task(task_id, "all good")
-        assert task_store.list_task()[0]["status"] == "done"
+        assert task_store.list_task()[0]["status"] == "completed"
 
         task_id = task_store.add_task("doomed run")
         task_store.fail_task(task_id, "[Fox]: Task failed: boom")
@@ -163,12 +163,12 @@ class TestDefaultDbPath:
         monkeypatch.setattr(task_store, "DB_PATH", str(host_db))
 
         task_id = task_store.add_task("never finishes")
-        assert task_store.list_task()[0]["status"] == "pending"
+        assert task_store.list_task()[0]["status"] == "queued"
 
         task_store.fail_task(task_id, "error")
 
         entry = task_store.list_task()[0]
-        assert entry["status"] != "pending"
+        assert entry["status"] != "queued"
         assert entry["status"] == "failed"
 
     def test_repo_fallback_is_never_the_container_path(self):
