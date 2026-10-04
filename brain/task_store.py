@@ -3,6 +3,7 @@
 # importing the nessary modules
 import os
 import sqlite3
+import threading
 import time
 
 # adding the DATA_BASE path!
@@ -37,29 +38,85 @@ def default_db_path() -> str:
 
 DB_PATH = default_db_path()
 
+# Connection hardening for the threaded worker architecture (P1-7).
+#
+# - CONNECT_TIMEOUT_SECONDS bounds how long sqlite3.connect waits on a
+#   locked database before raising OperationalError.
+# - busy_timeout is the same bound enforced inside SQLite itself, so a
+#   lock held across two connections still resolves instead of failing
+#   instantly (defense in depth, not an unbounded retry: both bounds are
+#   finite and every genuine failure still surfaces to the caller).
+# - WAL lets readers proceed while a worker holds the write lock; without
+#   it every concurrent read/write risks "database is locked".
+# - synchronous=NORMAL is the WAL-compatible durability setting (a crash
+#   may lose the last transaction, which the boot reconciler already
+#   handles by marking orphaned `running` rows failed).
+CONNECT_TIMEOUT_SECONDS = 5.0
+BUSY_TIMEOUT_MS = 5000
+
+# Paths whose schema this process already initialized. DDL stays idempotent
+# (IF NOT EXISTS / conditional ALTER) so simultaneous first starts in two
+# processes are safe; the set only skips repeat work in this process.
+_schema_ready: set = set()
+_schema_lock = threading.Lock()
+
 # conn = _conn is like connection to database and conn.close Ahh that name itself mention that!
 
 # this function is going to handle/ stores data in the db also
 # this function is like one way to get access / connection to db
+# every operation opens its own short-lived connection (no shared global:
+# the worker is threaded) and every path below closes it via try/finally,
+# so an SQL error can never leak a connection. errors are never swallowed:
+# an unclosed connection would roll back, and finally still closes it.
 def _conn():
-    conn = sqlite3.connect(DB_PATH)
-    # this part is where it contains instruction to fetch the existing things in database
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            description TEXT,
-            result TEXT,
-            status TEXT,
-            created_at REAL,
-            provider TEXT
-        )"""
-    )
-    # additive migration for databases created before the provider column:
-    # a single ALTER TABLE, never a rebuild, so old rows keep working.
-    columns = [row[1] for row in conn.execute("PRAGMA table_info(tasks)")]
-    if "provider" not in columns:
-        conn.execute("ALTER TABLE tasks ADD COLUMN provider TEXT")
+    conn = sqlite3.connect(DB_PATH, timeout=CONNECT_TIMEOUT_SECONDS)
+    try:
+        conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        _configure_journal_mode(conn)
+        _ensure_schema(conn)
+    except BaseException:
+        conn.close()
+        raise
     return conn
+
+
+def _configure_journal_mode(conn) -> None:
+    # WAL is a file-database feature; :memory: databases keep their default.
+    # journal_mode persists in the file, synchronous does not, so the latter
+    # is set on every connection while the former is attempted each time too
+    # (a no-op when already WAL) to cover files created elsewhere.
+    if DB_PATH == ":memory:":
+        return
+    row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+    if row is not None and str(row[0]).lower() == "wal":
+        conn.execute("PRAGMA synchronous=NORMAL")
+
+
+def _ensure_schema(conn) -> None:
+    # run DDL once per database path per process; concurrent first starts
+    # serialize on _schema_lock, and concurrent processes rely on the
+    # idempotent DDL itself (CREATE TABLE IF NOT EXISTS / conditional ALTER).
+    key = os.path.abspath(DB_PATH)
+    with _schema_lock:
+        if key in _schema_ready:
+            return
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                description TEXT,
+                result TEXT,
+                status TEXT,
+                created_at REAL,
+                provider TEXT
+            )"""
+        )
+        # additive migration for databases created before the provider column:
+        # a single ALTER TABLE, never a rebuild, so old rows keep working.
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(tasks)")]
+        if "provider" not in columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN provider TEXT")
+        conn.commit()
+        _schema_ready.add(key)
 
 # Task lifecycle states. There is exactly one state system:
 #   queued     - accepted, waiting for a worker
@@ -77,62 +134,71 @@ def _conn():
 # this function is ment to add task to db
 def add_task(description: str, provider: str = "ollama") -> int:
     conn = _conn()
-    # again its like instruction of insert task in db
-    cur = conn.execute(
-        "INSERT INTO tasks (description, result, status, created_at, provider) VALUES (?, ?, ?, ?, ?)",
-        (description, None, "queued", time.time(), provider),
-    )
-    conn.commit()
-    task_id = cur.lastrowid
-    conn.close()
-    return task_id
+    try:
+        # again its like instruction of insert task in db
+        cur = conn.execute(
+            "INSERT INTO tasks (description, result, status, created_at, provider) VALUES (?, ?, ?, ?, ?)",
+            (description, None, "queued", time.time(), provider),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
 
 # this function is used to update task which got completed by agent
 def complete_task(task_id: int, result:str):
     conn = _conn()
-    # again its instruction for execution of sql query!
-    conn.execute(
-        "UPDATE tasks SET result = ?, status = 'completed' WHERE id = ?",
-        (result, task_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        # again its instruction for execution of sql query!
+        conn.execute(
+            "UPDATE tasks SET result = ?, status = 'completed' WHERE id = ?",
+            (result, task_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 # this function records a terminal failure so a task never stays "queued"
 def fail_task(task_id: int, error: str):
     conn = _conn()
-    conn.execute(
-        "UPDATE tasks SET result = ?, status = 'failed' WHERE id = ?",
-        (str(error), task_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE tasks SET result = ?, status = 'failed' WHERE id = ?",
+            (str(error), task_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 # this function is used to list the task stored in db to the agent
 def list_task():
     conn = _conn()
-    # same again used to execute sql query
-    rows = conn.execute(
-        "SELECT id, description, result, status, created_at, provider FROM tasks ORDER BY id DESC"
-    ).fetchall()
-    conn.close()
-    return[
-        {"id": r[0], "description": r[1], "result": r[2], "status": r[3], "created_at": r[4], "provider": r[5]}
-        # yes its a for loop iterate through the above!
-        for r in rows
-    ]
+    try:
+        # same again used to execute sql query
+        rows = conn.execute(
+            "SELECT id, description, result, status, created_at, provider FROM tasks ORDER BY id DESC"
+        ).fetchall()
+        return[
+            {"id": r[0], "description": r[1], "result": r[2], "status": r[3], "created_at": r[4], "provider": r[5]}
+            # yes its a for loop iterate through the above!
+            for r in rows
+        ]
+    finally:
+        conn.close()
 
 # this function fetches one task by id (None when it does not exist)
 def get_task(task_id: int):
     conn = _conn()
-    row = conn.execute(
-        "SELECT id, description, result, status, created_at, provider FROM tasks WHERE id = ?",
-        (task_id,),
-    ).fetchone()
-    conn.close()
-    if row is None:
-        return None
-    return {"id": row[0], "description": row[1], "result": row[2], "status": row[3], "created_at": row[4], "provider": row[5]}
+    try:
+        row = conn.execute(
+            "SELECT id, description, result, status, created_at, provider FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"id": row[0], "description": row[1], "result": row[2], "status": row[3], "created_at": row[4], "provider": row[5]}
+    finally:
+        conn.close()
 
 # this function atomically claims a queued task for execution.
 # only one worker can win the race: the UPDATE only matches queued rows,
@@ -140,39 +206,43 @@ def get_task(task_id: int):
 # never be cancelled afterwards.
 def claim_task(task_id: int) -> bool:
     conn = _conn()
-    cur = conn.execute(
-        "UPDATE tasks SET status = 'running' WHERE id = ? AND status = 'queued'",
-        (task_id,),
-    )
-    conn.commit()
-    claimed = cur.rowcount > 0
-    conn.close()
-    return claimed
+    try:
+        cur = conn.execute(
+            "UPDATE tasks SET status = 'running' WHERE id = ? AND status = 'queued'",
+            (task_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
 
 # this function cancels a task that has not started yet.
 # returns True only when this call performed queued->cancelled.
 def cancel_task(task_id: int) -> bool:
     conn = _conn()
-    cur = conn.execute(
-        "UPDATE tasks SET status = 'cancelled' WHERE id = ? AND status = 'queued'",
-        (task_id,),
-    )
-    conn.commit()
-    cancelled = cur.rowcount > 0
-    conn.close()
-    return cancelled
+    try:
+        cur = conn.execute(
+            "UPDATE tasks SET status = 'cancelled' WHERE id = ? AND status = 'queued'",
+            (task_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
 
 # this function records a task that outran FOX_TASK_TIMEOUT_SECONDS.
 # the worker owns the row (it claimed queued->running first), so this is
 # a plain terminal write like complete_task/fail_task.
 def timeout_task(task_id: int, message: str):
     conn = _conn()
-    conn.execute(
-        "UPDATE tasks SET result = ?, status = 'timed_out' WHERE id = ?",
-        (str(message), task_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE tasks SET result = ?, status = 'timed_out' WHERE id = ?",
+            (str(message), task_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 # this function reconciles rows left behind by a dead process.
 # running rows could never have finished, so they become failed; queued
@@ -180,13 +250,15 @@ def timeout_task(task_id: int, message: str):
 # re-enqueueing. called once at worker startup, never in the request path.
 def recover_interrupted(message: str) -> list:
     conn = _conn()
-    conn.execute(
-        "UPDATE tasks SET result = ?, status = 'failed' WHERE status = 'running'",
-        (str(message),),
-    )
-    rows = conn.execute(
-        "SELECT id, description, provider FROM tasks WHERE status = 'queued' ORDER BY id"
-    ).fetchall()
-    conn.commit()
-    conn.close()
-    return [{"id": row[0], "description": row[1], "provider": row[2] or "ollama"} for row in rows]
+    try:
+        conn.execute(
+            "UPDATE tasks SET result = ?, status = 'failed' WHERE status = 'running'",
+            (str(message),),
+        )
+        rows = conn.execute(
+            "SELECT id, description, provider FROM tasks WHERE status = 'queued' ORDER BY id"
+        ).fetchall()
+        conn.commit()
+        return [{"id": row[0], "description": row[1], "provider": row[2] or "ollama"} for row in rows]
+    finally:
+        conn.close()
