@@ -1,9 +1,7 @@
 # this program is used to access openai model AKA CHATGPT!
 
 # importing nessary modules
-import os
 import requests
-from . import openai_compatible
 
 
 # this function is used to connect Chatgpt to local Agent for Suggestion incase if agent stuck.....
