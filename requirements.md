@@ -1,16 +1,12 @@
 pytesseract
 pdf2image
 rich
-pathlib
 pandas
-img2tableq
+img2table
 plotext==5.2.8
-asyncio
 websockets
 fastmcp
-json
 pdfplumber
 mitmproxy
 fastapi
-sqlite3
 anthropic

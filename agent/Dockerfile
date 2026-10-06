@@ -11,8 +11,10 @@ RUN useradd -m -u 1000 appuser
  
 # Install Playwright's browser to a shared path, not root's home, so
 # appuser (who has no access to /root) can still launch chromium.
+# Pinned so rebuilds resolve the same stack (and the matching browser
+# build); all three support python 3.11 per PyPI requires-python metadata.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN pip install --no-cache-dir fastapi uvicorn playwright \
+RUN pip install --no-cache-dir fastapi==0.141.1 uvicorn==0.52.4 playwright==1.62.0 \
     && playwright install --with-deps chromium \
     && chmod -R a+rX /opt/playwright-browsers
  
