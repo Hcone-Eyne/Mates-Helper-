@@ -16,6 +16,7 @@ from brain.orchestrator import (
     set_provider,
     list_commands,
     handle_basic_command,
+    is_conversational_message,
 )
 
 
@@ -217,6 +218,50 @@ class TestHandleBasicCommand:
     def test_unknown_command_with_slash(self):
         result = handle_basic_command("/unknown")
         assert result is None
+
+
+class TestIsConversationalMessage:
+    """Routing: chit-chat answers directly, tasks run the Fox Club pipeline.
+
+    Markers match whole words only - substring checks misrouted ordinary
+    chat ("running" contains "run", "filed" contains "file") into full
+    task execution.
+    """
+
+    def test_greetings_are_conversational(self):
+        for msg in ["hi", "HI", "  hello  ", "hey fox", "good morning"]:
+            assert is_conversational_message(msg) is True
+
+    def test_questions_are_conversational(self):
+        assert is_conversational_message("what is a fox?") is True
+        assert is_conversational_message("how are you?") is True
+
+    def test_empty_is_not_conversational(self):
+        assert is_conversational_message("") is False
+        assert is_conversational_message("   ") is False
+
+    def test_marker_inside_longer_word_does_not_route_to_tasks(self):
+        # Each of these contains a marker only as a substring; all take a
+        # conversational path (question or conversational start).
+        assert is_conversational_message("Can you explain running?") is True
+        assert is_conversational_message("Who are you, maker?") is True
+        assert is_conversational_message("Tell me about listerine?") is True
+        assert is_conversational_message("The clerk filed the papers, right?") is True
+        assert is_conversational_message("What is profiling?") is True
+
+    def test_whole_word_markers_still_route_to_tasks(self):
+        assert is_conversational_message("organize my files") is False
+        assert is_conversational_message("delete my file") is False
+        assert is_conversational_message("delete my file.") is False
+        assert is_conversational_message("DELETE MY FILE") is False
+        assert is_conversational_message("How do I run this?") is False
+        assert is_conversational_message("Why save files?") is False
+        assert is_conversational_message("Can you list the reasons?") is False
+
+    def test_plain_statements_still_run_tasks(self):
+        # No conversational path applies - unchanged behavior.
+        assert is_conversational_message("I am running late") is False
+        assert is_conversational_message("show my profile") is False
 
 
 class TestRunTask:

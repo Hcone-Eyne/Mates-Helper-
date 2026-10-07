@@ -5,6 +5,7 @@
 
 # importing the nessary modules!
 import os
+import re
 
 import anthropic
 
@@ -140,7 +141,12 @@ def is_conversational_message(message: str) -> bool:
     if not normalized:
         return False
 
-    if any(marker in normalized for marker in _ACTION_MARKERS):
+    # Whole-word matching only: substring checks misroute ordinary chat
+    # ("running" contains "run", "profile" contains "file"), sending it
+    # down the full task pipeline. Punctuation is stripped by tokenizing
+    # so "delete my file." still matches the "file" marker.
+    words = set(re.findall(r"[a-z0-9]+", normalized))
+    if not words.isdisjoint(_ACTION_MARKERS):
         return False
 
     greetings = {
