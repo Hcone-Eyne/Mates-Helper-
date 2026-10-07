@@ -3,28 +3,72 @@
 # importing the nessary modules
 import os
 import json
+import sys
 import urllib.request
 import urllib.error
 
 from .discovery import discover_ollama
 
+# Env values that turn "fall back to an installed model" into an error.
+_STRICT_VALUES = {"1", "true", "yes", "on"}
+
+
 # creating a class!
 class OllamaClient:
 
     # setting up the constructor!
-    def __init__(self, host = None, model = None, think = False):
+    def __init__(self, host = None, model = None, think = False, strict = None):
         info = discover_ollama()
 
         self.host = (host or info["host"]).rstrip("/")
         self.think = think 
-        available_models = [model.get("name", "") for model in info.get("models", [])]
+        # Discovery payloads come from a live daemon: tolerate a missing or
+        # malformed model list here so callers always get the explicit
+        # "no model" RuntimeError instead of a TypeError/AttributeError.
+        discovered = info.get("models") or []
+        available_models = [
+            model.get("name", "") if isinstance(model, dict) else ""
+            for model in discovered
+        ]
 
         if model and model in available_models:
             self.model = model
         elif model and model not in available_models:
-            self.model = self._select_model(info["models"])
+            # The requested model is not installed. Fallback stays the default
+            # (existing callers keep working), but it is no longer silent: a
+            # caller that must get the model it asked for sets strict=True or
+            # OLLAMA_STRICT_MODEL=1 and gets a RuntimeError instead.
+            self.model = self._fallback_model(
+                requested=model,
+                available=discovered,
+                installed=available_models,
+                strict=strict,
+            )
         else:
             self.model = os.environ.get("OLLAMA_MODEL") or self._select_model(info["models"])
+
+    # decide what to do when the requested model is not installed
+    def _fallback_model(self, requested, available, installed, strict):
+        selected = self._select_model(available)
+
+        if strict is None:
+            strict = os.environ.get("OLLAMA_STRICT_MODEL", "").strip().lower() in _STRICT_VALUES
+
+        if strict:
+            raise RuntimeError(
+                f"[Fox]: Ollama model '{requested}' is not available. "
+                f"Installed models: {', '.join(installed) or 'none'}. "
+                "Set OLLAMA_STRICT_MODEL=0 (or omit strict) to fall back to "
+                "an installed model instead."
+            )
+
+        print(
+            f"[Fox]: requested Ollama model '{requested}' is not available; "
+            f"falling back to '{selected}'. Set OLLAMA_STRICT_MODEL=1 to make "
+            "this an error.",
+            file=sys.stderr,
+        )
+        return selected
 
     # this function is met to choose a model
     def _select_model(self, models):
@@ -35,7 +79,7 @@ class OllamaClient:
                 f"[Fox]: No Ollama model is found. Pull a model first."
             )
 
-        names = [model.get("name", "") for model in models if model.get("name")]
+        names = [model.get("name", "") for model in models if isinstance(model, dict) and model.get("name")]
         if not names:
             raise RuntimeError(
                 f"[Fox]: No Ollama model is found. Pull a model first."

@@ -75,28 +75,24 @@ class FoxConversationManager:
         self,
         model: str | None = None,
         think: bool = False,
+        strict: bool | None = None,
     ):
         # Discover Ollama and create shared client
         info = discover_ollama()
         self.host = info["host"].rstrip("/")
         self.think = think
-        
-        available_models = [m.get("name", "") for m in discover_ollama().get("models", [])]
-        
-        if model and model in available_models:
-            self.model = model
-        elif model and model not in available_models:
-            self.model = self._select_model(discover_ollama()["models"])
-        else:
-            import os
-            self.model = os.environ.get("OLLAMA_MODEL") or self._select_model(discover_ollama()["models"])
-        
-        # Shared Ollama client
+
+        # Model resolution lives in OllamaClient: a requested-but-missing
+        # model warns (or raises under strict=True / OLLAMA_STRICT_MODEL)
+        # instead of being silently swapped, and self.model always reflects
+        # the model that will actually run.
         self.client = OllamaClient(
             host=self.host,
-            model=self.model,
-            think=think
+            model=model,
+            think=think,
+            strict=strict,
         )
+        self.model = self.client.model
         
         # Conversation sessions for each member
         self.sessions: dict[str, MemberSession] = {}
@@ -111,15 +107,6 @@ class FoxConversationManager:
         self._selina: Selina | None = None
         self._gwen: Gwen | None = None
         self._fox: Fox | None = None
-    
-    def _select_model(self, models):
-        if not models:
-            raise RuntimeError("[Fox]: No Ollama model is found. Pull a model first.")
-        names = [m.get("name", "") for m in models if m.get("name")]
-        if not names:
-            raise RuntimeError("[Fox]: No Ollama model is found. Pull a model first.")
-        qwen_models = [n for n in names if "qwen" in n.lower()]
-        return qwen_models[0] if qwen_models else names[0]
     
     # Lazy initialization of agent backends
     def _get_julie(self) -> Julie:
