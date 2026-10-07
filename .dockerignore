@@ -1,0 +1,30 @@
+# Build context is the repository root (brain image). Keep it to source only.
+.git
+.github
+**/.git
+
+# environments and caches
+venv/
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.aider*
+
+# runtime data / logs are provided by volumes, never baked into images
+logs/
+data/
+
+# user data and host-specific state must never be baked into the image:
+# the Vault is user files, and file_index.db/user_profs.json contain
+# absolute host paths. the container recreates all three on demand.
+File_Manager/Vault/
+File_Manager/file_index.db*
+File_Manager/user_profs.json
+
+# macOS / editor noise
+**/.DS_Store
+
+# not needed inside the brain image
+test/
+stress_test.py

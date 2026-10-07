@@ -19,9 +19,15 @@ WORKDIR /app
 # brain/app.py imports File_Manager.api.routes and brain/orchestrator.py imports
 # the agent package, so the image needs all three trees. docker-compose.yml
 # therefore builds this file with the repository root as the build context.
+# agent/ollama/tools.py additionally imports Finance_bot, Memory, bot and
+# Path_mapper lazily when finance/schedule tools execute, so those source
+# units are copied too - otherwise the tools fail inside the container.
 COPY brain/ ./brain/
 COPY File_Manager/ ./File_Manager/
 COPY agent/ ./agent/
+COPY Memory/ ./Memory/
+COPY Finance_bot/ ./Finance_bot/
+COPY bot.py Path_mapper.py ./
 
 # brain and File_Manager are namespace/regular packages living under /app.
 ENV PYTHONPATH=/app

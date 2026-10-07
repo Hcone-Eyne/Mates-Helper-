@@ -19,12 +19,13 @@ covered by tests; the rest are real, still-open work.
       agent/fox/runtime/executor.py; the Vault HTTP API (/files/delete) has
       no trash. Reuse that trash implementation rather than writing a second
       one.
-- [ ] `brain/Dockerfile` only copies app.py, orchestrator.py, tools.py and
-      task_store.py, but brain/app.py imports File_Manager and
-      brain/orchestrator.py imports the agent package - the brain image as
-      written cannot import its own app. Needs a build context fix and a
-      `docker compose up` run to verify (Docker engine was not running during
-      the audit).
+- [ ] `brain/Dockerfile` previously copied only app.py, orchestrator.py,
+      tools.py and task_store.py, so the image could not import its own app.
+      Fixed: root build context copies brain/, File_Manager/, agent/ plus the
+      lazily imported Memory/, Finance_bot/, bot.py, Path_mapper.py; user data
+      (Vault, file_index.db, user_profs.json) is excluded via .dockerignore.
+      Still needs one live `docker compose up` run to verify (no Docker engine
+      in this environment; covered by static layout-import tests meanwhile).
 - [ ] Phone: message listing is not implemented (kdeconnect-cli has no
       option). D-Bus conversations plugin is the possible path.
 
