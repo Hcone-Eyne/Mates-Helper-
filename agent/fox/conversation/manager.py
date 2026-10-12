@@ -5,6 +5,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from pathlib import Path
+import os
 
 from agent.ollama.client import OllamaClient
 from agent.ollama.discovery import discover_ollama
@@ -26,17 +27,48 @@ class ConversationMessage:
     content: str
 
 
+# Default cap on retained messages per member session (user + assistant
+# counted together). Bounds every turn's payload to recent context instead
+# of the whole session. Overridable via FOX_HISTORY_MAX_MESSAGES, following
+# the project's env-configuration convention (OLLAMA_MODEL, FOX_API_TOKEN,
+# FOX_TASK_TIMEOUT_SECONDS, ...).
+HISTORY_MAX_MESSAGES_DEFAULT = 20
+
+
+def history_max_messages() -> int:
+    """Resolve the session history bound. Invalid values fall back to the
+    default; the floor of 2 keeps at least one full exchange."""
+    try:
+        return max(2, int(os.environ.get("FOX_HISTORY_MAX_MESSAGES", HISTORY_MAX_MESSAGES_DEFAULT)))
+    except (TypeError, ValueError):
+        return HISTORY_MAX_MESSAGES_DEFAULT
+
+
 @dataclass
 class MemberSession:
     """Conversation session for a single Fox Club member."""
     member_name: str
     history: list[ConversationMessage] = field(default_factory=list)
-    
+
     def add_user_message(self, content: str):
         self.history.append(ConversationMessage(role="user", content=content))
-    
+        self._trim()
+
     def add_assistant_message(self, content: str):
         self.history.append(ConversationMessage(role="assistant", content=content))
+        self._trim()
+
+    def _trim(self):
+        """Keep only the most recent messages.
+
+        Without this, every turn re-sends the entire session, so request
+        size, latency, and provider cost grow for the life of the manager
+        until the model context window breaks. Oldest-first is safe: the
+        model always sees the latest exchanges.
+        """
+        limit = history_max_messages()
+        if len(self.history) > limit:
+            del self.history[:len(self.history) - limit]
     
     def get_messages(self) -> list[dict[str, str]]:
         """Convert history to Ollama messages format."""
