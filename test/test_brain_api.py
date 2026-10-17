@@ -141,7 +141,13 @@ class TestFileManagerRoutesMounted:
 
     def test_file_manager_routes_are_listed(self, client):
         paths = set(client.app.openapi()["paths"])
-        assert {"/files/health", "/files/scan", "/files/search", "/files/delete"} <= paths
+        assert {
+            "/files/health",
+            "/files/scan",
+            "/files/search",
+            "/files/delete",
+            "/files/restore",
+        } <= paths
 
     def test_task_and_file_routes_share_one_app(self, client):
         paths = set(client.app.openapi()["paths"])
@@ -150,9 +156,17 @@ class TestFileManagerRoutesMounted:
 
 
 class TestDestructiveFileEndpointIsConfined:
-    """/files/delete is permanent (no trash), so it must stay inside the Vault."""
+    """/files/delete moves files to Vault trash and must stay inside the Vault."""
 
-    def test_delete_outside_the_vault_is_rejected(self, client, tmp_path):
+    def test_delete_outside_the_vault_is_rejected(self, client, tmp_path, monkeypatch):
+        import File_Manager.modify_files as modify_files
+        import File_Manager.organizer as organizer
+
+        vault = tmp_path / "Vault"
+        vault.mkdir()
+        monkeypatch.setattr(organizer, "VAULT_ROOT", vault)
+        monkeypatch.setattr(modify_files, "VAULT_ROOT", vault)
+
         outside = tmp_path / "not-in-the-vault.txt"
         outside.write_text("keep me")
 
@@ -164,21 +178,25 @@ class TestDestructiveFileEndpointIsConfined:
 
     def test_delete_inside_the_vault_still_works(self, client, tmp_path, monkeypatch):
         import File_Manager.db as file_db
-        from File_Manager.organizer import VAULT_ROOT
+        import File_Manager.modify_files as modify_files
+        import File_Manager.organizer as organizer
 
+        vault = tmp_path / "Vault"
+        vault.mkdir()
         monkeypatch.setattr(file_db, "DB_PATH", str(tmp_path / "index.db"))
-        VAULT_ROOT.mkdir(parents=True, exist_ok=True)
-        victim = VAULT_ROOT / "_brain_api_delete_test.txt"
+        monkeypatch.setattr(organizer, "VAULT_ROOT", vault)
+        monkeypatch.setattr(modify_files, "VAULT_ROOT", vault)
+
+        victim = vault / "_brain_api_delete_test.txt"
         victim.write_text("temp")
 
-        try:
-            response = client.post("/files/delete", json={"path": str(victim)}, headers=AUTH)
-            assert response.status_code == 200
-            assert response.json()["success"] is True
-            assert not victim.exists()
-        finally:
-            if victim.exists():
-                victim.unlink()
+        response = client.post("/files/delete", json={"path": str(victim)}, headers=AUTH)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["trashed"] is True
+        assert not victim.exists()
+        assert (vault / ".fox_trash" / "_brain_api_delete_test.txt").exists()
 
 
 class TestApiAuthorization:
@@ -203,6 +221,7 @@ class TestApiAuthorization:
 
         for path, payload in [
             ("/files/delete", {"path": str(victim)}),
+            ("/files/restore", {"path": str(victim)}),
             ("/files/move", {"source": str(victim), "destination": str(victim)}),
             ("/files/copy", {"source": str(victim), "destination": str(victim)}),
             ("/files/rename", {"source": str(victim), "new_name": "x.txt"}),
@@ -226,6 +245,9 @@ class TestApiAuthorization:
         assert client.post(
             "/files/delete", json={"path": str(victim)}, headers=WRONG_AUTH
         ).status_code == 401
+        assert client.post(
+            "/files/restore", json={"path": str(victim)}, headers=WRONG_AUTH
+        ).status_code == 401
         assert victim.exists(), "wrong-token delete must not touch the file"
 
     def test_unconfigured_server_token_fails_closed(self, client, monkeypatch):
@@ -242,23 +264,19 @@ class TestApiAuthorization:
 
     def test_authenticated_mutation_still_works(self, client, tmp_path, monkeypatch):
         import File_Manager.db as file_db
-        from File_Manager.organizer import VAULT_ROOT
+        import File_Manager.modify_files as modify_files
+        import File_Manager.organizer as organizer
 
+        vault = tmp_path / "Vault"
+        vault.mkdir()
         monkeypatch.setattr(file_db, "DB_PATH", str(tmp_path / "index.db"))
-        VAULT_ROOT.mkdir(parents=True, exist_ok=True)
-        target = VAULT_ROOT / "_brain_api_auth_test_dir"
-        if target.exists():
-            import shutil
-            shutil.rmtree(target)
+        monkeypatch.setattr(organizer, "VAULT_ROOT", vault)
+        monkeypatch.setattr(modify_files, "VAULT_ROOT", vault)
 
-        try:
-            response = client.post("/files/folder", json={"path": str(target)}, headers=AUTH)
-            assert response.status_code == 200
-            assert target.is_dir()
-        finally:
-            if target.exists():
-                import shutil
-                shutil.rmtree(target)
+        target = vault / "_brain_api_auth_test_dir"
+        response = client.post("/files/folder", json={"path": str(target)}, headers=AUTH)
+        assert response.status_code == 200
+        assert target.is_dir()
 
 
 class TestTaskCancellation:

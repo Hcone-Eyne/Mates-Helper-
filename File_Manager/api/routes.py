@@ -43,6 +43,11 @@ class RenameRequest(BaseModel):
 class DeleteRequest(BaseModel):
     path:str
 
+# creating a class for to Restore a trashed file
+class RestoreRequest(BaseModel):
+    path:str
+    destination:str | None = None
+
 # creating a class to creae a folder in File manager
 class CreateFolderRequest(BaseModel):
     path:str
@@ -87,7 +92,7 @@ def move_file(req: MoveRequest):
             "success": True,
             "path": str(result)
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError) as e:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as e:
         raise HTTPException(
             status_code = 400,
             detail  = str(e)
@@ -105,7 +110,7 @@ def copy_files(req: CopyRequest):
             "success": True,
             "path": str(result)
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError) as e:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as e:
         raise HTTPException(
             status_code=400,
             detail=str(e)
@@ -123,21 +128,40 @@ def rename_file(req: RenameRequest):
             "success":True,
             "path": str(result)
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError) as e:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as e:
         raise HTTPException(
             status_code = 400,
             detail = str(e)
         )
 
 @mutations.post("/delete")
-# this function calls the function to delete a file in file manager
+# this function calls the function to move a file to trash in file manager
 def delete_file(req: DeleteRequest):
     try:
-        deleted = modify_files.delete_file(req.path)
+        trash_path = modify_files.delete_file(req.path)
         return {
-            "success": deleted,
+            "success": True,
+            "path": str(trash_path),
+            "trash_path": str(trash_path),
+            "trashed": True,
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError) as exc:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc)
+        )
+
+@mutations.post("/restore")
+# this function calls the function to restore a trashed file in file manager
+def restore_file(req: RestoreRequest):
+    try:
+        restored = modify_files.restore_file(req.path, req.destination)
+        return {
+            "success": True,
+            "path": str(restored),
+            "restored_to": str(restored),
+        }
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc)
@@ -152,7 +176,7 @@ def create_folder(req: CreateFolderRequest):
             "success": True,
             "path": str(result)
         }
-    except ValueError as exc:
+    except (ValueError, IsADirectoryError, PermissionError, OSError) as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc)

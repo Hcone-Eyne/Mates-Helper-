@@ -14,11 +14,6 @@ covered by tests; the rest are real, still-open work.
       header); without it every protected endpoint fails closed with 401.
 - [ ] Cli still calls `os.system('clear')` before each menu redraw; if a
       terminal does not support it the menu reprints over itself.
-- [ ] `File_Manager/modify_files.py::delete_file` still deletes permanently
-      (Vault-scoped). The Fox Club pipeline has trash/restore through
-      agent/fox/runtime/executor.py; the Vault HTTP API (/files/delete) has
-      no trash. Reuse that trash implementation rather than writing a second
-      one.
 - [ ] `brain/Dockerfile` previously copied only app.py, orchestrator.py,
       tools.py and task_store.py, so the image could not import its own app.
       Fixed: root build context copies brain/, File_Manager/, agent/ plus the
@@ -31,6 +26,10 @@ covered by tests; the rest are real, still-open work.
 
 ## Done
 
+- [DONE] `File_Manager/modify_files.py::delete_file` and `/files/delete` now
+      move files into `.fox_trash` via the shared Fox `FileActionExecutor`
+      and `FoxSecurityBoundary`, with `restore_file` and authenticated
+      `POST /files/restore` support (test/test_file_manager_trash.py).
 - [DONE] Tools.py: brain/tools.py now delegates finance_calculate and
       schedule_view to the agent-side registry instead of returning
       "In Progress" placeholders (test/test_brain_tools.py).

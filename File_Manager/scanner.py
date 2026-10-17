@@ -34,8 +34,11 @@ def scan(root: Path = VAULT_ROOT):
 
         # make sure the resolved path (yes the above one) is actually inside the vault
         try:
-            path.relative_to(root)
+            rel = path.relative_to(root)
         except ValueError:
+            continue
+
+        if ".fox_trash" in rel.parts:
             continue
 
         stat = path.stat()
@@ -76,9 +79,12 @@ def scan_file(path :Path):
 
     # prevent indexing files outside the vault
     try:
-        path.relative_to(root)
+        rel = path.relative_to(root)
     except ValueError:
         raise ValueError("File is outside the File Manager Vault")
+
+    if ".fox_trash" in rel.parts:
+        raise ValueError("Cannot index files inside Vault trash")
 
     if not path.is_file():
         raise FileNotFoundError(path)

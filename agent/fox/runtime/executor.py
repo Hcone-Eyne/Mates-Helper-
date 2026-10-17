@@ -12,6 +12,7 @@ from agent.fox.security import (
     FoxSecurityError,
     InvalidActionError,
     StorageQuotaError,
+    SymlinkEscapeError,
 )
 
 
@@ -25,6 +26,14 @@ CATEGORIES = [
     "Archives",
     "Other",
 ]
+
+
+# In-memory index mapping resolved trash paths back to their pre-trash
+# relative path inside the boundary root. This preserves original paths even
+# when multiple deletions of the same filename collide inside .fox_trash,
+# without creating extra files inside .fox_trash.
+_TRASH_METADATA: dict[Path, Path] = {}
+_ORIGINAL_TO_TRASH: dict[tuple[Path, Path], list[Path]] = {}
 
 
 class FileActionExecutor:
@@ -41,13 +50,26 @@ class FileActionExecutor:
     def __init__(
         self,
         boundary: Union[FoxSecurityBoundary, Path, str],
+        *,
+        enforce_area_policy: bool = True,
     ):
         if isinstance(boundary, FoxSecurityBoundary):
             self._boundary = boundary
         else:
-            self._boundary = FoxSecurityBoundary(boundary)
+            self._boundary = FoxSecurityBoundary(
+                boundary,
+                enforce_area_policy=enforce_area_policy,
+            )
 
         self._target = self._boundary.root_resolved
+
+    def find_trash_entry(self, original_rel_path: Path) -> Path:
+        """Return the most recent existing trash file for original_rel_path."""
+        bucket = _ORIGINAL_TO_TRASH.get((self._target, original_rel_path), [])
+        for candidate in reversed(bucket):
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return self._boundary.trash_dir / original_rel_path
 
     # ------------------------------------------------------------------
     # Backward compatibility
@@ -592,6 +614,14 @@ class FileActionExecutor:
                 "delete_file requires 'path'"
             )
 
+        candidate = Path(path).expanduser()
+        if not candidate.is_absolute():
+            candidate = self._boundary.root / candidate
+        if candidate.is_symlink():
+            raise SymlinkEscapeError(
+                f"Cannot delete symlink: {path}"
+            )
+
         src_path = self._boundary.validate_delete(path)
 
         if not src_path.is_file():
@@ -630,6 +660,12 @@ class FileActionExecutor:
         shutil.move(
             str(src_path),
             str(trash_path),
+        )
+
+        resolved_trash = trash_path.resolve()
+        _TRASH_METADATA[resolved_trash] = rel_path
+        _ORIGINAL_TO_TRASH.setdefault((self._target, rel_path), []).append(
+            resolved_trash
         )
 
         return {
@@ -764,6 +800,8 @@ class FileActionExecutor:
                 f"Trash path is not a file: {src_path}"
             )
 
+        resolved_src = src_path.resolve()
+
         if destination is not None:
             dest_path = self._boundary.validate_restore_destination(destination)
 
@@ -776,9 +814,11 @@ class FileActionExecutor:
                 )
 
         else:
-            rel = src_path.relative_to(
-                self._boundary.trash_dir
-            )
+            rel = _TRASH_METADATA.get(resolved_src)
+            if rel is None:
+                rel = src_path.relative_to(
+                    self._boundary.trash_dir
+                )
 
             dest_path = self._target / rel
 
@@ -806,6 +846,12 @@ class FileActionExecutor:
             str(src_path),
             str(dest_path),
         )
+
+        orig_rel = _TRASH_METADATA.pop(resolved_src, None)
+        if orig_rel is not None:
+            bucket = _ORIGINAL_TO_TRASH.get((self._target, orig_rel))
+            if bucket and resolved_src in bucket:
+                bucket.remove(resolved_src)
 
         return {
             "action": "restore_file",
@@ -880,7 +926,13 @@ class FileActionExecutor:
             )
 
             if validated.is_file():
+                resolved_entry = validated.resolve()
                 validated.unlink()
+                orig_rel = _TRASH_METADATA.pop(resolved_entry, None)
+                if orig_rel is not None:
+                    bucket = _ORIGINAL_TO_TRASH.get((self._target, orig_rel))
+                    if bucket and resolved_entry in bucket:
+                        bucket.remove(resolved_entry)
                 deleted_count += 1
 
             elif validated.is_dir():

@@ -108,13 +108,34 @@ class TestDockerfile:
             assert pattern in text, f".dockerignore misses {pattern}"
 
 
+def _dockerignore_patterns() -> list[str]:
+    patterns: list[str] = []
+    for raw in DOCKERIGNORE.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        patterns.append(line.rstrip("/"))
+    return patterns
+
+
 def _build_image_layout(tmp_path: Path) -> Path:
-    """Copy the same trees the Dockerfile copies into a fake image root."""
+    """Copy the same trees the Dockerfile copies into a fake image root,
+    applying the user-data exclusions from .dockerignore."""
+    fm_ignored = ["__pycache__", "*.pyc", ".DS_Store"]
+    for pat in _dockerignore_patterns():
+        if pat.startswith("File_Manager/"):
+            fm_ignored.append(pat.split("/", 1)[1])
+
     for tree in ("brain", "File_Manager", "agent", "Memory", "Finance_bot"):
+        ignore = (
+            shutil.ignore_patterns(*fm_ignored)
+            if tree == "File_Manager"
+            else shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
+        )
         shutil.copytree(
             REPO / tree,
             tmp_path / tree,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
+            ignore=ignore,
         )
     for module in ("bot.py", "Path_mapper.py"):
         shutil.copy2(REPO / module, tmp_path / module)
@@ -122,6 +143,16 @@ def _build_image_layout(tmp_path: Path) -> Path:
 
 
 class TestImageLayoutImports:
+    def test_image_layout_excludes_vault_and_host_state(self, tmp_path):
+        """Applying .dockerignore during COPY File_Manager/ must not ship Vault,
+        file_index.db*, or user_profs.json into the image."""
+        root = _build_image_layout(tmp_path)
+        fm_dir = root / "File_Manager"
+
+        assert not (fm_dir / "Vault").exists()
+        assert not (fm_dir / "user_profs.json").exists()
+        assert list(fm_dir.glob("file_index.db*")) == []
+
     def test_brain_app_imports_in_image_layout(self, tmp_path):
         """The container layout must be able to import what uvicorn starts."""
         root = _build_image_layout(tmp_path)
@@ -145,6 +176,45 @@ class TestImageLayoutImports:
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
         assert "IMPORT_OK" in result.stdout
+
+    def test_brain_app_health_and_auth_work_in_clean_image_layout(self, tmp_path):
+        """Even with Vault, file_index.db, and user_profs.json excluded by
+        .dockerignore, the app must serve /health, /files/health, enforce 401
+        without a token, and accept authenticated requests."""
+        root = _build_image_layout(tmp_path)
+        data_vol = root / "data"
+        data_vol.mkdir(parents=True, exist_ok=True)
+
+        script = (
+            "import os\n"
+            "os.environ['FOX_API_TOKEN'] = 'container-check-token'\n"
+            f"os.environ['FOX_TASK_DB_PATH'] = {str(data_vol / 'tasks.db')!r}\n"
+            "from fastapi.testclient import TestClient\n"
+            "import brain.app\n"
+            "client = TestClient(brain.app.app)\n"
+            "assert client.get('/health').status_code == 200\n"
+            "assert client.get('/files/health').status_code == 200\n"
+            "assert client.get('/tasks').status_code == 401\n"
+            "assert client.post('/files/scan').status_code == 401\n"
+            "headers = {'X-API-Token': 'container-check-token'}\n"
+            "assert client.get('/tasks', headers=headers).status_code == 200\n"
+            "assert client.post('/files/scan', headers=headers).status_code == 200\n"
+            "assert client.get('/files/').status_code == 200\n"
+            "print('RUNTIME_OK')\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=root,
+            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, (
+            "image layout failed runtime health/auth check\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "RUNTIME_OK" in result.stdout
 
     def test_image_layout_has_no_flattened_app_module(self):
         # Guards the regression this file exists to prevent: the old image

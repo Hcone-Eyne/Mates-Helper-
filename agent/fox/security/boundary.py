@@ -108,6 +108,8 @@ class FoxSecurityBoundary:
         root: str | Path,
         create: bool = True,
         storage_quota_bytes: int | None = None,
+        *,
+        enforce_area_policy: bool = True,
     ):
         root_path = Path(root).expanduser()
 
@@ -143,7 +145,11 @@ class FoxSecurityBoundary:
         object.__setattr__(self, "_root_resolved", Path(root_path).resolve())
         object.__setattr__(self, "_trash_dir", trash_path)
         object.__setattr__(self, "_trash_dir_resolved", trash_path)
-        object.__setattr__(self, "_policy", FoxDirectoryPolicy(root_path))
+        object.__setattr__(
+            self,
+            "_policy",
+            FoxDirectoryPolicy(root_path, enforce_area_policy=enforce_area_policy),
+        )
         object.__setattr__(self, "_storage_manager", FoxStorageManager(root_path, storage_quota_bytes))
         object.__setattr__(self, "_sealed", True)
 
@@ -414,50 +420,62 @@ class FoxSecurityBoundary:
 
     def validate_read(self, path: str | Path) -> Path:
         """Validate that a path can be read according to policy."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_read(path)
 
     def validate_write(self, path: str | Path) -> Path:
         """Validate that a path can be written according to policy."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_write(path)
 
     def validate_create(self, path: str | Path) -> Path:
         """Validate that a path can be created."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_create(path)
 
     def validate_delete(self, path: str | Path) -> Path:
         """Validate that a path can be deleted."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_delete(path)
 
     def validate_move_source(self, path: str | Path) -> Path:
         """Validate that a source path can be moved."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_move_source(path)
 
     def validate_copy_source(self, path: str | Path) -> Path:
         """Validate that a source can be copied (read-only areas allowed)."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_copy_source(path)
 
     def validate_move_destination(self, path: str | Path) -> Path:
         """Validate that a destination can receive a moved file."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_move_destination(path)
 
     def validate_copy_destination(self, path: str | Path) -> Path:
         """Validate that a destination can receive a copied file."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_write(path)
 
     def validate_organise_target(self, path: str | Path) -> Path:
         """Validate that a target can be organised."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_organise_target(path)
 
     def validate_restore_destination(self, path: str | Path, allow_new: bool = True) -> Path:
         """Validate that a restore destination is allowed."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_restore_destination(path)
 
     def validate_rename_source(self, path: str | Path) -> Path:
         """Validate that a file can be renamed (must be writable)."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_write(path)
 
     def validate_rename_destination(self, path: str | Path) -> Path:
         """Validate rename destination (must be writable, filename only)."""
+        self.validate_path(path, must_exist=False)
         return self._policy.validate_write(path)
 
     def get_area(self, path: str | Path) -> str:

@@ -29,8 +29,9 @@ class FoxDirectoryPolicy:
         "trash",
     })
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, enforce_area_policy: bool = True):
         self._root = Path(root).expanduser().resolve()
+        self._enforce_area_policy = enforce_area_policy
 
     @property
     def root(self) -> Path:
@@ -63,7 +64,7 @@ class FoxDirectoryPolicy:
         if area in self.RESERVED_DIRS:
             raise FoxPolicyError("Fox trash is controlled internally")
 
-        if area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
+        if self._enforce_area_policy and area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
             raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
 
         return area
@@ -76,6 +77,8 @@ class FoxDirectoryPolicy:
 
         # Allow root-level files for executor compatibility.
         if len(relative.parts) == 1:
+            if relative.parts[0] in self.RESERVED_DIRS:
+                raise FoxPolicyError("Fox trash is controlled internally")
             return self._root / relative
 
         area = relative.parts[0]
@@ -83,7 +86,7 @@ class FoxDirectoryPolicy:
         if area in self.RESERVED_DIRS:
             raise FoxPolicyError("Fox trash is controlled internally")
 
-        if area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
+        if self._enforce_area_policy and area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
             raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
 
         return self._root / relative
@@ -96,6 +99,8 @@ class FoxDirectoryPolicy:
 
         # Allow root-level files (but not directories) for executor compatibility.
         if len(relative.parts) == 1:
+            if relative.parts[0] in self.RESERVED_DIRS:
+                raise FoxPolicyError("Fox trash is controlled internally")
             # Single component under root - allow as file operation.
             # Root-level directories (other than managed) are rejected by area().
             return self._root / relative
@@ -105,18 +110,20 @@ class FoxDirectoryPolicy:
         if area in self.RESERVED_DIRS:
             raise FoxPolicyError("Fox trash is controlled internally")
 
-        if area not in self.WRITEABLE_DIRS:
+        if self._enforce_area_policy and area not in self.WRITEABLE_DIRS:
             raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
 
         return self._root / relative
 
     def validate_create(self, path: str | Path) -> Path:
-        # Creating directories at root level is not allowed.
+        # Creating directories at root level is not allowed in Fox Space.
         # Only managed subdirectories (workspace, storage, etc.) may be created.
         relative = self._relative(path)
         if not relative.parts:
             raise FoxPolicyError("Fox Space root is not writable")
-        if len(relative.parts) == 1:
+        if relative.parts[0] in self.RESERVED_DIRS:
+            raise FoxPolicyError("Fox trash is controlled internally")
+        if self._enforce_area_policy and len(relative.parts) == 1:
             raise FoxPolicyError("Arbitrary root-level directories are not allowed")
         return self.validate_write(path)
 
@@ -132,7 +139,7 @@ class FoxDirectoryPolicy:
     def validate_organise_target(self, path: str | Path) -> Path:
         validated = self.validate_write(path)
 
-        if self.area(validated) not in self.WRITEABLE_DIRS:
+        if self._enforce_area_policy and self.area(validated) not in self.WRITEABLE_DIRS:
             raise FoxPolicyError("Files may only be organised inside workspace or storage")
 
         return validated
@@ -152,7 +159,7 @@ class FoxDirectoryPolicy:
         if area in self.RESERVED_DIRS:
             raise FoxPolicyError("Fox trash is controlled internally")
 
-        if area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
+        if self._enforce_area_policy and area not in (self.READ_ONLY_DIRS | self.WRITEABLE_DIRS):
             raise FoxPolicyError(f"Unknown or unmanaged Fox Space directory: {area}")
 
         return self._root / relative
