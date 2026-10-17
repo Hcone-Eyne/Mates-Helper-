@@ -147,6 +147,14 @@ def run_finance_bot():
 
                 # using the operation_finder function to perform the operation
                 result = operation_finder(expression)
+                # an invalid expression returns None (see operations_finder);
+                # printing "Result: None" would look like a successful
+                # calculation that produced nothing, while the agent and MCP
+                # paths report it as an error - so skip the result line and
+                # the memory entry (operation_finder already printed its hint)
+                if result is None:
+                    input("\nPress Enter to continue...")
+                    continue
                 # printing the result to the console
                 console.print(f"[Fox]: Result: {result}")
                 # this stores the expression and result in memory_log for future reference

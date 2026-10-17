@@ -50,7 +50,15 @@ def schedule_view():
     # this asusual do the financ calculator operatiosn!
 def finance_calculate(expression:str):
     """Perform basic financial calculations (+, -, *, /) and save to history."""
-    result = operation_finder(expression)
+    # operation_finder returns None only for token-less input ("abc", "");
+    # malformed expressions raise ValueError/IndexError/ZeroDivisionError
+    # instead. The agent and CLI entry points turn those exceptions into a
+    # [Fox]-style error message, so MCP must do the same instead of letting
+    # a raw exception become an unhandled tool error.
+    try:
+        result = operation_finder(expression)
+    except Exception as e:
+        return f"[Fox]: Calculator error: {e}"
     # this condition checks for input
     if result is None:
         return "[Fox]: Invalid expression. Use digits!"
