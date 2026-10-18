@@ -2,10 +2,12 @@
 
 # importing nessary moduels
 import json
+import os
 from pathlib import Path
 
-# setting up path route with pathlib
-PREFS_PATH = Path(__file__).resolve().parent / "user_profs.json"
+# setting up path route with pathlib (configurable via environment for container volumes)
+_PREFS_ENV = os.environ.get("FOX_PREFS_PATH") or os.environ.get("USER_PROFS_PATH")
+PREFS_PATH = Path(_PREFS_ENV).expanduser().resolve() if _PREFS_ENV else (Path(__file__).resolve().parent / "user_profs.json")
 
 # File organisation Rules
 DEFAULT_RULES = {
@@ -26,6 +28,7 @@ def _load():
 
 # this function is used to save preferences
 def _save(prefs):
+    PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
     PREFS_PATH.write_text(json.dumps(prefs, indent = 2))
 
 # this function used to determine the category for a file extension

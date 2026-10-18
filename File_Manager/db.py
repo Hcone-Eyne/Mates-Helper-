@@ -3,16 +3,21 @@
 # cmd: upsert_file("/tmp/file.pdf", "file.pdf", ".pdf", "Documents", 123, 1700000000.0, "sample")
 
 # importing the necessary modules
+import os
 import sqlite3
 import time
 from pathlib import Path
  
-# path location of DB, auto-detected by pathlib
-DB_PATH = Path(__file__).resolve().parent / "file_index.db"
+# path location of DB, auto-detected by pathlib or overridable via environment
+_DB_ENV = os.environ.get("FOX_DB_PATH") or os.environ.get("FILE_INDEX_DB_PATH")
+DB_PATH = Path(_DB_ENV).expanduser().resolve() if _DB_ENV else (Path(__file__).resolve().parent / "file_index.db")
  
  
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    db_p = Path(DB_PATH)
+    if not db_p.parent.exists():
+        db_p.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_p), check_same_thread=False, timeout=10.0)
     conn.row_factory = sqlite3.Row
     _ensure_scheme(conn)
     return conn
@@ -40,29 +45,28 @@ def _ensure_scheme(conn):
            name, snippet
         )
     """)
- 
- 
+
+
 def upsert_file(path, name, ext, category, size, mtime, snippet=""):
     # cmd: upsert_file(Path("/tmp/example.txt"), "example.txt", ".txt", "Notes", 42, 1700000000.0)
     conn = get_connection()
     cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO files (path, name, ext, category, size, mtime, snippet, added_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(path) DO UPDATE SET
+               name=excluded.name,
+               ext=excluded.ext,
+               category=excluded.category,
+               size=excluded.size,
+               mtime=excluded.mtime,
+               snippet=excluded.snippet""",
+        (str(path), name, ext, category, size, mtime, snippet, time.time()),
+    )
     cur.execute("SELECT id FROM files WHERE path = ?", (str(path),))
     row = cur.fetchone()
- 
-    if row:
-        file_id = row["id"]
-        cur.execute(
-           "UPDATE files SET name=?, ext=?, category=?, size=?, mtime=?, snippet=? WHERE id=?",
-           (name, ext, category, size, mtime, snippet, file_id),
-        )
-    else:
-        cur.execute(
-           """INSERT INTO files (path, name, ext, category, size, mtime, snippet, added_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-           (str(path), name, ext, category, size, mtime, snippet, time.time()),
-        )
-        file_id = cur.lastrowid
- 
+    file_id = row["id"]
+
     cur.execute("DELETE FROM files_fts WHERE rowid = ?", (file_id,))
     cur.execute("INSERT INTO files_fts (rowid, name, snippet) VALUES (?, ?, ?)", (file_id, name, snippet))
     conn.commit()

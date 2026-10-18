@@ -45,14 +45,17 @@ services:
       - FOX_API_TOKEN=${FOX_API_TOKEN}
       - AGENT_HOST=agent
       - AGENT_PORT=9000
+      - FOX_VAULT_ROOT=/data/Vault
+      - FOX_DB_PATH=/data/file_index.db
+      - FOX_PREFS_PATH=/data/user_profs.json
     volumes:
       - ./data:/data
     ports:
       - "127.0.0.1:7010:7000"
       # entry point: POST /submit_task, GET /tasks
-      # Loopback only: the API is token-gated (FOX_API_TOKEN) and
-      # /files/delete permanently removes files inside the Vault, so it
-      # must not be reachable from the LAN even with auth in front of it.
+      # Loopback only: the API is token-gated (FOX_API_TOKEN). All file operations
+      # (including /files/delete, which moves files to recoverable trash) are
+      # restricted to loopback and not reachable from the LAN.
     networks:
       - sandbox-net
     # Normal network access — this is the "brain," not the sandboxed

@@ -60,6 +60,12 @@ class TestComposeBuild:
         for service in ("agent", "mitm-proxy", "brain"):
             assert compose["services"][service]["networks"] == ["sandbox-net"]
 
+    def test_brain_configures_data_persistence_environment(self, compose):
+        env = compose["services"]["brain"]["environment"]
+        assert "FOX_VAULT_ROOT=/data/Vault" in env
+        assert "FOX_DB_PATH=/data/file_index.db" in env
+        assert "FOX_PREFS_PATH=/data/user_profs.json" in env
+
 
 class TestDockerfile:
     def test_copies_every_tree_the_brain_imports(self):

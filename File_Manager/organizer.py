@@ -4,13 +4,15 @@
 # cmd: from organizer import move_and_learn; move_and_learn(Path("./some-file.pdf"), "Notes")
 
 # importing necessary modules
+import os
 import shutil
 from pathlib import Path
 
 from File_Manager import db, preferences
 
-# initialising those paths
-VAULT_ROOT = Path(__file__).resolve().parent / "Vault"
+# initialising those paths (configurable via environment for container volumes)
+_VAULT_ENV = os.environ.get("FOX_VAULT_ROOT") or os.environ.get("VAULT_ROOT")
+VAULT_ROOT = Path(_VAULT_ENV).expanduser().resolve() if _VAULT_ENV else (Path(__file__).resolve().parent / "Vault")
 INBOX = VAULT_ROOT / "Inbox"  # can be used like drag-and-drop
 
 # defining categories
@@ -18,6 +20,9 @@ CATEGORIES = ["Documents", "Notes", "Code", "Images", "Audio", "Video", "Archive
 
 # this function creates the main inbox and all category folders if they don't already exist.
 def ensure_vault():
+    global INBOX
+    INBOX = VAULT_ROOT / "Inbox"
+    VAULT_ROOT.mkdir(parents=True, exist_ok=True)
     INBOX.mkdir(parents=True, exist_ok=True)
     for cat in CATEGORIES:
         (VAULT_ROOT / cat).mkdir(parents=True, exist_ok=True)
