@@ -135,6 +135,27 @@ class TestDispatcher:
             dispatcher("browse", {})
 
 
+class TestBrainCapabilityRelationship:
+    """P2-2: brain/tools.py stays the Anthropic model-facing schema, but the
+    tools it delegates must be discoverable in the agent-side capability
+    registry (the plugin source of truth)."""
+
+    def test_delegated_tools_exist_in_agent_capability_registry(self):
+        from agent.ollama.tools import get_capability
+
+        for name in ("finance_calculate", "schedule_view"):
+            assert get_capability(name) is not None, f"{name} must be discoverable"
+
+    def test_delegated_capability_entry_resolves_to_agent_registry(self):
+        import importlib
+        from agent.ollama.tools import get_capability
+
+        cap = get_capability("finance_calculate")
+        module_path, attr = cap["entry"].rsplit(".", 1)
+        handler = getattr(importlib.import_module(module_path), attr)
+        assert handler is __import__("agent.ollama.tools", fromlist=["TOOLS"]).TOOLS["finance_calculate"]["fn"]
+
+
 class TestDispatcherEdgeCases:
     """Edge case tests for dispatcher."""
 

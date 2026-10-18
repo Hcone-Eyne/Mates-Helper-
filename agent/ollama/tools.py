@@ -19,18 +19,22 @@ import pandas as pd
 TOOLS = OrderedDict()       # name -> {"description": ..., "params": [...], "fn": callable}
 
 
-def _register(name, description, params, fn):
+def _register(name, description, params, fn, permission=None):
     """Register a tool that FoxAgent can call.
 
     *name*        – identifier the model will emit (e.g. "finance_calculate")
     *description* – one-line explanation shown to the model
     *params*      – list of {"name": ..., "type": ..., "desc": ...} dicts
     *fn*          – callable(**kwargs) -> str
+    *permission*  – optional permission label for P2-3 centralized control.
+                    METADATA ONLY: nothing enforces it yet, so recording one
+                    must never claim a gate that does not exist today.
     """
     TOOLS[name] = {
         "description": description,
         "params": params,
         "fn": fn,
+        "permission": permission,
     }
 
 
@@ -67,6 +71,48 @@ def tool_prompt_block():
     lines.append("You MUST wait for the tool result before claiming any action was performed.")
     lines.append("Never fabricate tool results. If a tool fails, say so honestly.")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Capability registry view (P2-2)
+# ---------------------------------------------------------------------------
+# TOOLS above is the single authoritative registry and dispatch() is the
+# single execution funnel. The helpers below only *describe* entries in a
+# stable shape for the Brain / future CLI (a read-only projection, never a
+# second registry):
+#   - no dynamic module scanning, no auto-import of discovered files
+#   - a capability's "entry" is a dotted path that must resolve to the exact
+#     callable already stored in TOOLS - execution stays in dispatch()
+#   - the "permission" field is descriptive metadata; centralized permission
+#     enforcement is P2-3 work, so no gate is wired to it here.
+# Note for P2-3/P2-4: importing this module pulls in pandas, so callers that
+# must stay lightweight (like brain.tools) import it lazily.
+
+def _capability(name, info):
+    """Return the read-only capability view of one TOOLS entry."""
+    fn = info["fn"]
+    return {
+        "name": name,
+        "description": info["description"],
+        "params": [dict(p) for p in info["params"]],
+        "entry": f"{fn.__module__}.{fn.__qualname__}",
+        "permission": info.get("permission"),
+    }
+
+
+def capabilities():
+    """Return every registered capability, in registry order."""
+    return [_capability(name, info) for name, info in TOOLS.items()]
+
+
+def get_capability(name):
+    """Return the capability view for *name*, or None when unknown.
+
+    Resolution is never an execution path: run capabilities through the
+    existing dispatch() funnel as ``dispatch(capability["name"], ...)``.
+    """
+    info = TOOLS.get(name)
+    return None if info is None else _capability(name, info)
 
 
 # ---------------------------------------------------------------------------

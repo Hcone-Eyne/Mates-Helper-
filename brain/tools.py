@@ -9,6 +9,19 @@ AGENT_HOST = os.environ.get("AGENT_HOST", "agent")
 AGENT_PORT = os.environ.get("AGENT_PORT", "9000")
 
 # list of tools
+# These entries are the *Anthropic model-facing* tool schema: the subset of
+# capabilities the cloud model is allowed to call. They are deliberately a
+# separate view from the agent-side capability registry (agent/ollama/tools.py
+# TOOLS - the plugin/capability source of truth, with capabilities() /
+# get_capability() metadata and dispatch() as the only execution funnel).
+# finance_calculate and schedule_view execute by delegating to that registry's
+# dispatch funnel; browse is Brain-only and posts to the sandboxed browser
+# endpoint. Generating this list from the capability registry would change
+# model-visible schemas (different param shapes, tools the agent registry does
+# not hold), so consolidation is deferred to P2-3 and must not silently alter
+# what the Anthropic model sees. Do not import agent.ollama.tools at module
+# level here: it pulls in pandas and this module is loaded by the browse-only
+# path.
 TOOLS = [
     {
         "name": "browse",

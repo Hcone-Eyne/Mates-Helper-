@@ -222,6 +222,125 @@ class TestToolRegistry:
         assert "finance_calculate" in block
 
 
+class TestCapabilityRegistry:
+    """P2-2: thin capability view over the single TOOLS registry.
+
+    The view must describe entries only - execution always stays in the
+    existing dispatch() funnel, and the permission field is metadata that
+    does not (yet) enforce anything.
+    """
+
+    def test_every_registered_tool_appears_in_capability_registry(self):
+        from agent.ollama.tools import capabilities
+
+        caps = capabilities()
+        assert {c["name"] for c in caps} == set(TOOLS.keys())
+        assert len(caps) == len(TOOLS)
+
+    def test_well_known_capabilities_are_discoverable(self):
+        from agent.ollama.tools import capabilities
+
+        names = {c["name"] for c in capabilities()}
+        assert "finance_calculate" in names
+        assert "schedule_view" in names
+        assert "web_browse" in names
+
+    def test_single_source_of_truth_no_competing_registry(self):
+        from agent.ollama import tools as t
+
+        # The projection must be derived from TOOLS, not a copy of it.
+        assert t.capabilities.__globals__ is t.__dict__
+        assert "PLUGIN_TOOLS" not in vars(t)
+        assert "CAPABILITY_TOOLS" not in vars(t)
+
+    def test_metadata_is_preserved(self):
+        from agent.ollama.tools import get_capability
+
+        cap = get_capability("finance_calculate")
+        assert cap["name"] == "finance_calculate"
+        assert cap["description"] == TOOLS["finance_calculate"]["description"]
+        assert [p["name"] for p in cap["params"]] == [
+            p["name"] for p in TOOLS["finance_calculate"]["params"]
+        ]
+
+    def test_entry_resolves_to_the_registered_callable(self):
+        import importlib
+        from agent.ollama.tools import get_capability
+
+        cap = get_capability("finance_calculate")
+        module_path, attr = cap["entry"].rsplit(".", 1)
+        handler = getattr(importlib.import_module(module_path), attr)
+        assert handler is TOOLS["finance_calculate"]["fn"]
+
+    def test_unknown_capability_does_not_resolve(self):
+        from agent.ollama.tools import get_capability
+
+        assert get_capability("fizzlebot_delete_everything") is None
+        assert get_capability("") is None
+        assert get_capability(None) is None
+
+    def test_unknown_capability_is_not_in_the_view(self):
+        from agent.ollama.tools import capabilities
+
+        names = {c["name"] for c in capabilities()}
+        assert "unknown_tool" not in names
+
+    def test_lookup_still_leads_to_the_existing_dispatch(self):
+        from Memory.memory_storer import memory_log
+        from agent.ollama.tools import get_capability
+
+        saved = list(memory_log)
+        try:
+            cap = get_capability("finance_calculate")
+            # Resolution returns metadata; execution goes through dispatch().
+            assert dispatch(cap["name"], expression="2+2") == "[Fox]: Result -> 4"
+        finally:
+            memory_log[:] = saved
+
+    def test_permission_key_present_on_every_capability(self):
+        from agent.ollama.tools import capabilities
+
+        for cap in capabilities():
+            assert "permission" in cap
+
+    def test_permission_absent_by_default(self):
+        from agent.ollama.tools import get_capability
+
+        # No gate is wired yet (P2-3), so current capabilities record none.
+        assert get_capability("schedule_view")["permission"] is None
+        assert get_capability("web_browse")["permission"] is None
+
+    def test_permission_metadata_can_be_recorded_and_stays_metadata_only(self):
+        from agent.ollama import tools as t
+
+        t._register(
+            name="test_permission_tool",
+            description="temporary P2-2 test capability",
+            params=[{"name": "x", "type": "str", "desc": "demo"}],
+            fn=lambda x="": f"ran:{x}",
+            permission="phone.send_message",
+        )
+        try:
+            cap = t.get_capability("test_permission_tool")
+            assert cap["permission"] == "phone.send_message"
+
+            # Metadata only - no enforcement exists, and none may be faked:
+            # a labelled capability is still executable via dispatch today.
+            assert t.dispatch("test_permission_tool", x="input") == "ran:input"
+        finally:
+            t.TOOLS.pop("test_permission_tool", None)
+        assert t.get_capability("test_permission_tool") is None
+
+    def test_capability_params_are_copied_not_shared(self):
+        from agent.ollama.tools import get_capability
+
+        cap = get_capability("finance_calculate")
+        cap["params"].append({"name": "bogus"})
+        assert len(TOOLS["finance_calculate"]["params"]) == 1
+        cap["params"][0]["name"] = "tampered"
+        assert TOOLS["finance_calculate"]["params"][0]["name"] != "tampered"
+
+
 class TestArgRegex:
     """Test ARG_RE regex."""
 
