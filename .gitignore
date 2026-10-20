@@ -13,6 +13,9 @@ env/
 .env.*
 !.env.example
 
+# AI assistant working artifacts
+.aider*
+
 # File Manager runtime data
 File_Manager/file_index.db
 File_Manager/file_index.db-*

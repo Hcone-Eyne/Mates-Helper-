@@ -15,12 +15,25 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Optional
 from collections import defaultdict
 
-# Add project root to path
-sys.path.insert(0, '/Users/enoch/Desktop/Connectivity_A')
+# Add project root to path (this file is runnable from anywhere)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import pytest
 
 from agent.ollama.ollama_agent import OllamaFoxAgent
 from agent.fox.runtime.runtime import build_runtime
 from agent.ollama.client import OllamaClient
+
+# Every category below drives the real Ollama server ~100 times, so a full
+# run takes many minutes. Under pytest it is opt-in (like RUN_OLLAMA_TESTS);
+# `python stress_test.py` always runs the harness.
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_STRESS_TESTS") != "1",
+    reason=(
+        "Live-LLM stress harness (~1300 model calls). "
+        "Set RUN_STRESS_TESTS=1, or run `python stress_test.py`."
+    ),
+)
 
 # ============================================================
 # TEST FIXTURE SETUP
@@ -417,7 +430,8 @@ def test_empty_task():
 
 def test_unknown_action():
     """Test unknown action handling."""
-    from agent.fox.runtime.executor import FileActionExecutor, _UnavailableExecutor
+    from agent.fox.runtime.executor import FileActionExecutor
+    from agent.fox.runtime.runtime import _UnavailableExecutor
     executor = FileActionExecutor(TEST_DIR)
     try:
         executor.execute("unknown_action_xyz", {})
@@ -457,7 +471,7 @@ def test_malformed_annie():
 def test_selina_unable_resolve():
     """Test Selina unable to resolve action."""
     from agent.selina.selina import Selina
-    from agent.fox.runtime.executor import _UnavailableExecutor
+    from agent.fox.runtime.runtime import _UnavailableExecutor
     from agent.annie.annie import AnnieResult
     
     executor = _UnavailableExecutor()

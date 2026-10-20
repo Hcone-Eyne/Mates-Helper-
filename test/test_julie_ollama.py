@@ -20,7 +20,7 @@ from agent.julie.julie import Julie, JulieResult, OllamaReasoningBackend
 def test_julie_with_ollama():
     """Verify Julie can parse a structured response from a local Ollama model."""
     try:
-        client = OllamaClient(model="qwen2.5:3b-instruct")
+        client = OllamaClient(model="qwen2.5:3b-instruct", strict=True)
     except RuntimeError as exc:
         pytest.skip(f"Ollama is unavailable: {exc}")
 

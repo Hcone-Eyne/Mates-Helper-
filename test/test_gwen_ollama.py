@@ -22,7 +22,7 @@ from agent.selina.selina import SelinaResult
 def test_gwen_structured_review_with_ollama():
     """Verify Gwen can parse a structured JSON response from a local Ollama model."""
     try:
-        client = OllamaClient(model="qwen2.5:3b-instruct")
+        client = OllamaClient(model="qwen2.5:3b-instruct", strict=True)
     except RuntimeError as exc:
         pytest.skip(f"Ollama is unavailable: {exc}")
 
@@ -77,7 +77,7 @@ def test_gwen_structured_review_with_ollama():
 def test_gwen_structured_review_rejects_dangerous_plan():
     """Verify Gwen flags a destructive plan from a local Ollama model."""
     try:
-        client = OllamaClient(model="qwen2.5:3b-instruct")
+        client = OllamaClient(model="qwen2.5:3b-instruct", strict=True)
     except RuntimeError as exc:
         pytest.skip(f"Ollama is unavailable: {exc}")
 
@@ -138,7 +138,7 @@ def test_gwen_detects_unsafe_downloads_organization():
         - risk of moving important files
     """
     try:
-        client = OllamaClient(model="qwen2.5:3b-instruct")
+        client = OllamaClient(model="qwen2.5:3b-instruct", strict=True)
     except RuntimeError as exc:
         pytest.skip(f"Ollama is unavailable: {exc}")
 
