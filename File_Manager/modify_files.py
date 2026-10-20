@@ -1,7 +1,5 @@
-# this progam is used to modify files!
-
-# importing the nessary modules
 import shutil
+import threading
 from pathlib import Path
 
 from agent.fox.runtime.executor import FileActionExecutor
@@ -11,6 +9,7 @@ from . import db, organizer
 from .organizer import CATEGORIES, VAULT_ROOT, _snippet
 
 _DEFAULT_VAULT_ROOT = VAULT_ROOT
+_FS_LOCK = threading.RLock()
 
 
 def _get_vault_root() -> Path:
@@ -97,196 +96,214 @@ def _unique_destination(path_destination):
 
 # this function is used to move files inside of the vault
 def move_file(source, destination):
+    with _FS_LOCK:
+        # getting data from another function!
+        source = _resolve_inside_vault(source)
+        destination = _resolve_inside_vault(destination)
 
-    # getting data from another function!
-    source = _resolve_inside_vault(source)
-    destination = _resolve_inside_vault(destination)
+        # checks for exists of file
+        if not source.exists():
+            raise FileNotFoundError(source)
 
-    # checks for exists of file
-    if not source.exists():
-        raise FileNotFoundError(source)
+        # checks in dir!
+        if source.is_dir():
+            raise IsADirectoryError(source)
 
-    # checks in dir!
-    if source.is_dir():
-        raise IsADirectoryError(source)
+        destination.parent.mkdir(parents=True, exist_ok=True)
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
+        destination = _unique_destination(destination)
 
-    destination = _unique_destination(destination)
+        shutil.move(str(source), str(destination))
 
-    shutil.move(str(source), str(destination))
+        try:
+            db.remove_file(source)
+        except Exception:
+            pass
 
-    db.remove_file(source)
+        stat = destination.stat()
 
-    stat = destination.stat()
+        try:
+            db.upsert_file(
+                destination,
+                destination.name,
+                destination.suffix.lower(),
+                destination.parent.name,
+                stat.st_size,
+                stat.st_mtime
+            )
+        except Exception:
+            pass
 
-    db.upsert_file(
-        destination,
-        destination.name,
-        destination.suffix.lower(),
-        destination.parent.name,
-        stat.st_size,
-        stat.st_mtime
-    )
-
-    return destination
+        return destination
 
 # this function is all about copy file into the vault!
 def copy_file(source, destination):
+    with _FS_LOCK:
+        # fetch the required source
+        source = _resolve_inside_vault(source)
+        destination = _resolve_inside_vault(destination)
 
-    # fetch the required source
-    source = _resolve_inside_vault(source)
-    destination = _resolve_inside_vault(destination)
+        # check for existance
+        if not source.exists():
+            raise FileNotFoundError(source)
 
-    # check for existance
-    if not source.exists():
-        raise FileNotFoundError(source)
+        # checks if its present in dir
+        if source.is_dir():
+            raise IsADirectoryError(source)
 
-    # checks if its present in dir
-    if source.is_dir():
-        raise IsADirectoryError(source)
+        destination.parent.mkdir(parents=True, exist_ok=True)
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
+        destination = _unique_destination(destination)
 
-    destination = _unique_destination(destination)
+        shutil.copy2(str(source), str(destination))
 
-    shutil.copy2(str(source), str(destination))
+        stat = destination.stat()
 
-    stat = destination.stat()
+        try:
+            db.upsert_file(
+                destination,
+                destination.name,
+                destination.suffix.lower(),
+                destination.parent.name,
+                stat.st_size,
+                stat.st_mtime
+            )
+        except Exception:
+            pass
 
-    db.upsert_file(
-        destination,
-        destination.name,
-        destination.suffix.lower(),
-        destination.parent.name,
-        stat.st_size,
-        stat.st_mtime
-    )
-
-    return destination
+        return destination
 
 # this function is uised to rename file without chaning the directory!
 def rename_file(path, new_name):
+    with _FS_LOCK:
+        # get the path!
+        path = _resolve_inside_vault(path)
 
-    # get the path!
-    path = _resolve_inside_vault(path)
+        # check for file exits
+        if not path.exists():
+            raise FileNotFoundError(path)
 
-    # check for file exits
-    if not path.exists():
-        raise FileNotFoundError(path)
+        # check if dir is valid!
+        if path.is_dir():
+            raise IsADirectoryError(path)
 
-    # check if dir is valid!
-    if path.is_dir():
-        raise IsADirectoryError(path)
+        # checking if the changed name is new name or not
+        if not new_name or Path(new_name).name != new_name:
+            raise ValueError("new_name must be filename, not a path!")
 
-    # checking if the changed name is new name or not
-    if not new_name or Path(new_name).name != new_name:
-        raise ValueError("new_name must be filename, not a path!")
+        destination = path.parent / new_name
+        destination = _unique_destination(destination)
 
-    destination = path.parent / new_name
-    destination = _unique_destination(destination)
+        # rename if everything is good!
+        path.rename(destination)
 
-    # rename if everything is good!
-    path.rename(destination)
+        stat = destination.stat()
 
-    stat = destination.stat()
+        try:
+            db.upsert_file(
+                destination,
+                destination.name,
+                destination.suffix.lower(),
+                destination.parent.name,
+                stat.st_size,
+                stat.st_mtime
+            )
+        except Exception:
+            pass
 
-    db.upsert_file(
-        destination,
-        destination.name,
-        destination.suffix.lower(),
-        destination.parent.name,
-        stat.st_size,
-        stat.st_mtime
-    )
-
-    return destination
+        return destination
 
 # this functino handles the delection process of a file!
 # Moves the file into Vault trash (.fox_trash) via the shared Fox
 # FileActionExecutor rather than permanently unlinking it.
 def delete_file(path):
+    with _FS_LOCK:
+        root = _get_vault_root().expanduser().resolve()
+        resolved = _resolve_inside_vault(path, allow_trash=False)
 
-    root = _get_vault_root().expanduser().resolve()
-    resolved = _resolve_inside_vault(path, allow_trash=False)
+        if resolved == root or resolved.is_dir():
+            raise IsADirectoryError(resolved)
 
-    if resolved == root or resolved.is_dir():
-        raise IsADirectoryError(resolved)
+        if not resolved.exists():
+            raise FileNotFoundError(resolved)
 
-    if not resolved.exists():
-        raise FileNotFoundError(resolved)
+        _, executor = _vault_executor(root)
+        try:
+            result = executor.execute("delete_file", {"path": str(resolved)})
+        except FoxSecurityError as exc:
+            raise ValueError(str(exc)) from exc
 
-    _, executor = _vault_executor(root)
-    try:
-        result = executor.execute("delete_file", {"path": str(resolved)})
-    except FoxSecurityError as exc:
-        raise ValueError(str(exc)) from exc
+        try:
+            db.remove_file(resolved)
+        except Exception:
+            pass
 
-    db.remove_file(resolved)
-
-    return root / result["trash_path"]
+        return root / result["trash_path"]
 
 
 # this function restores a trashed file back into the Vault!
 def restore_file(path, destination=None):
+    with _FS_LOCK:
+        root = _get_vault_root().expanduser().resolve()
+        candidate = _resolve_inside_vault(path, allow_trash=True)
+        boundary, executor = _vault_executor(root)
 
-    root = _get_vault_root().expanduser().resolve()
-    candidate = _resolve_inside_vault(path, allow_trash=True)
-    boundary, executor = _vault_executor(root)
+        if candidate == root or candidate == boundary.trash_dir:
+            raise IsADirectoryError(candidate)
 
-    if candidate == root or candidate == boundary.trash_dir:
-        raise IsADirectoryError(candidate)
+        if boundary.is_trash_path(candidate):
+            trash_src = candidate
+        else:
+            rel = candidate.relative_to(root)
+            trash_src = executor.find_trash_entry(rel)
 
-    if boundary.is_trash_path(candidate):
-        trash_src = candidate
-    else:
-        rel = candidate.relative_to(root)
-        trash_src = executor.find_trash_entry(rel)
+        if trash_src.is_dir():
+            raise IsADirectoryError(trash_src)
 
-    if trash_src.is_dir():
-        raise IsADirectoryError(trash_src)
+        if not trash_src.exists():
+            raise FileNotFoundError(path)
 
-    if not trash_src.exists():
-        raise FileNotFoundError(path)
+        args = {"path": str(trash_src)}
+        if destination is not None:
+            dest_resolved = _resolve_inside_vault(destination, allow_trash=False)
+            if dest_resolved == root:
+                raise IsADirectoryError(dest_resolved)
+            args["destination"] = str(dest_resolved)
 
-    args = {"path": str(trash_src)}
-    if destination is not None:
-        dest_resolved = _resolve_inside_vault(destination, allow_trash=False)
-        if dest_resolved == root:
-            raise IsADirectoryError(dest_resolved)
-        args["destination"] = str(dest_resolved)
+        try:
+            result = executor.execute("restore_file", args)
+        except FoxSecurityError as exc:
+            raise ValueError(str(exc)) from exc
 
-    try:
-        result = executor.execute("restore_file", args)
-    except FoxSecurityError as exc:
-        raise ValueError(str(exc)) from exc
+        restored_path = root / result["restored_to"]
+        stat = restored_path.stat()
+        category = restored_path.parent.name
+        if category not in CATEGORIES:
+            category = "Other"
 
-    restored_path = root / result["restored_to"]
-    stat = restored_path.stat()
-    category = restored_path.parent.name
-    if category not in CATEGORIES:
-        category = "Other"
+        try:
+            db.upsert_file(
+                restored_path,
+                restored_path.name,
+                restored_path.suffix.lower(),
+                category,
+                stat.st_size,
+                stat.st_mtime,
+                _snippet(restored_path),
+            )
+        except Exception:
+            pass
 
-    db.upsert_file(
-        restored_path,
-        restored_path.name,
-        restored_path.suffix.lower(),
-        category,
-        stat.st_size,
-        stat.st_mtime,
-        _snippet(restored_path),
-    )
-
-    return restored_path
+        return restored_path
 
 
 # this function handles the creating of folder!
 def create_folder(path):
+    with _FS_LOCK:
+        # get the path
+        path = _resolve_inside_vault(path)
 
-    # get the path
-    path = _resolve_inside_vault(path)
+        # create the folder!
+        path.mkdir(parents=True, exist_ok=True)
 
-    # create the folder!
-    path.mkdir(parents=True, exist_ok=True)
-
-    return path
+        return path

@@ -1,8 +1,8 @@
-# Adapts Selina's ActionExecutor protocol to work with FoxSecurityBoundary
-# All filesystem operations are constrained by FoxSecurityBoundary
-# LLMs can request actions but cannot authorize privileged operations
-
+import os
 import shutil
+import sqlite3
+import threading
+import time
 from pathlib import Path
 from typing import Any, Union
 
@@ -27,13 +27,108 @@ CATEGORIES = [
     "Other",
 ]
 
+_FS_LOCK = threading.RLock()
 
 # In-memory index mapping resolved trash paths back to their pre-trash
-# relative path inside the boundary root. This preserves original paths even
-# when multiple deletions of the same filename collide inside .fox_trash,
-# without creating extra files inside .fox_trash.
+# relative path inside the boundary root. Backed by persistent SQLite in root
+# so original paths survive process restarts and uvicorn reloads.
 _TRASH_METADATA: dict[Path, Path] = {}
 _ORIGINAL_TO_TRASH: dict[tuple[Path, Path], list[Path]] = {}
+
+
+def _get_trash_db(root: Path) -> sqlite3.Connection:
+    meta_path = root / ".fox_trash_meta.sqlite"
+    conn = sqlite3.connect(str(meta_path), timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trash_entries (
+            trash_rel TEXT PRIMARY KEY,
+            orig_rel TEXT NOT NULL,
+            trashed_at REAL NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def _record_trash_entry(root: Path, trash_resolved: Path, trash_rel_in_trash: Path, orig_rel: Path) -> None:
+    with _FS_LOCK:
+        _TRASH_METADATA[trash_resolved] = orig_rel
+        _ORIGINAL_TO_TRASH.setdefault((root, orig_rel), []).append(trash_resolved)
+        try:
+            with _get_trash_db(root) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO trash_entries (trash_rel, orig_rel, trashed_at) VALUES (?, ?, ?)",
+                    (str(trash_rel_in_trash), str(orig_rel), time.time()),
+                )
+        except Exception:
+            pass
+
+
+def _get_orig_rel_for_trash(root: Path, trash_resolved: Path, trash_rel_in_trash: Path) -> Path:
+    with _FS_LOCK:
+        if trash_resolved in _TRASH_METADATA:
+            return _TRASH_METADATA[trash_resolved]
+        try:
+            with _get_trash_db(root) as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT orig_rel FROM trash_entries WHERE trash_rel = ?", (str(trash_rel_in_trash),))
+                row = cur.fetchone()
+                if row:
+                    res = Path(row[0])
+                    _TRASH_METADATA[trash_resolved] = res
+                    return res
+        except Exception:
+            pass
+        return trash_rel_in_trash
+
+
+def _find_newest_trash_entry(root: Path, trash_dir: Path, orig_rel: Path) -> Path:
+    with _FS_LOCK:
+        bucket = _ORIGINAL_TO_TRASH.get((root, orig_rel), [])
+        for candidate in reversed(bucket):
+            if candidate.exists() and candidate.is_file():
+                return candidate
+
+        try:
+            with _get_trash_db(root) as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT trash_rel FROM trash_entries WHERE orig_rel = ? ORDER BY trashed_at DESC",
+                    (str(orig_rel),),
+                )
+                for (t_rel,) in cur.fetchall():
+                    cand = trash_dir / t_rel
+                    if cand.exists() and cand.is_file():
+                        return cand
+        except Exception:
+            pass
+
+        return trash_dir / orig_rel
+
+
+def _remove_trash_entry(root: Path, trash_resolved: Path, trash_rel_in_trash: Path) -> None:
+    with _FS_LOCK:
+        orig_rel = _TRASH_METADATA.pop(trash_resolved, None)
+        bucket = _ORIGINAL_TO_TRASH.get((root, orig_rel)) if orig_rel else None
+        if bucket and trash_resolved in bucket:
+            bucket.remove(trash_resolved)
+        try:
+            with _get_trash_db(root) as conn:
+                conn.execute("DELETE FROM trash_entries WHERE trash_rel = ?", (str(trash_rel_in_trash),))
+        except Exception:
+            pass
+
+
+def _clear_all_trash_entries(root: Path) -> None:
+    with _FS_LOCK:
+        _TRASH_METADATA.clear()
+        _ORIGINAL_TO_TRASH.clear()
+        try:
+            with _get_trash_db(root) as conn:
+                conn.execute("DELETE FROM trash_entries")
+        except Exception:
+            pass
 
 
 class FileActionExecutor:
@@ -65,11 +160,7 @@ class FileActionExecutor:
 
     def find_trash_entry(self, original_rel_path: Path) -> Path:
         """Return the most recent existing trash file for original_rel_path."""
-        bucket = _ORIGINAL_TO_TRASH.get((self._target, original_rel_path), [])
-        for candidate in reversed(bucket):
-            if candidate.exists() and candidate.is_file():
-                return candidate
-        return self._boundary.trash_dir / original_rel_path
+        return _find_newest_trash_entry(self._target, self._boundary.trash_dir, original_rel_path)
 
     # ------------------------------------------------------------------
     # Backward compatibility
@@ -211,6 +302,19 @@ class FileActionExecutor:
                 return candidate
 
             counter += 1
+
+    def _safe_move_file(
+        self,
+        src: Path,
+        dest: Path,
+        resolve_collision: bool = True,
+    ) -> Path:
+        """Move src to dest without overwriting existing files."""
+        if resolve_collision and dest.exists():
+            dest = self._resolve_collision(dest)
+        self._ensure_parent_dirs(dest)
+        shutil.move(str(src), str(dest))
+        return dest
 
     # ------------------------------------------------------------------
     # organise_folder
@@ -637,45 +741,41 @@ class FileActionExecutor:
         # Check storage quota (delete moves to trash, which is already counted)
         self._check_quota_for_write(src_path, src_path, "delete")
 
-        rel_path = self._get_relative(src_path)
+        with _FS_LOCK:
+            rel_path = self._get_relative(src_path)
 
-        trash_path = (
-            self._boundary.trash_dir / rel_path
-        )
+            trash_path = (
+                self._boundary.trash_dir / rel_path
+            )
 
-        # Explicitly validate the generated trash path using trash-specific validation.
-        self._boundary.validate_trash_write(trash_path)
+            # Explicitly validate the generated trash path using trash-specific validation.
+            self._boundary.validate_trash_write(trash_path)
 
-        self._ensure_parent_dirs(
-            trash_path
-        )
+            self._ensure_parent_dirs(
+                trash_path
+            )
 
-        trash_path = self._resolve_collision(
-            trash_path
-        )
+            trash_path = self._safe_move_file(
+                src_path,
+                trash_path,
+                resolve_collision=True,
+            )
 
-        # Revalidate after collision resolution.
-        self._boundary.validate_trash_write(trash_path)
+            # Revalidate after collision resolution.
+            self._boundary.validate_trash_write(trash_path)
 
-        shutil.move(
-            str(src_path),
-            str(trash_path),
-        )
+            resolved_trash = trash_path.resolve()
+            rel_trash_in_trash = trash_path.relative_to(self._boundary.trash_dir)
+            _record_trash_entry(self._target, resolved_trash, rel_trash_in_trash, rel_path)
 
-        resolved_trash = trash_path.resolve()
-        _TRASH_METADATA[resolved_trash] = rel_path
-        _ORIGINAL_TO_TRASH.setdefault((self._target, rel_path), []).append(
-            resolved_trash
-        )
-
-        return {
-            "action": "delete_file",
-            "original": str(rel_path),
-            "trash_path": str(
-                self._get_relative(trash_path)
-            ),
-            "trashed": True,
-        }
+            return {
+                "action": "delete_file",
+                "original": str(rel_path),
+                "trash_path": str(
+                    self._get_relative(trash_path)
+                ),
+                "trashed": True,
+            }
 
     # ------------------------------------------------------------------
     # search_files
@@ -801,68 +901,57 @@ class FileActionExecutor:
             )
 
         resolved_src = src_path.resolve()
+        rel_trash_in_trash = src_path.relative_to(self._boundary.trash_dir)
 
-        if destination is not None:
-            dest_path = self._boundary.validate_restore_destination(destination)
+        with _FS_LOCK:
+            if destination is not None:
+                dest_path = self._boundary.validate_restore_destination(destination)
 
-            if (
-                dest_path.exists()
-                and dest_path.is_dir()
-            ):
-                dest_path = (
-                    dest_path / src_path.name
-                )
+                if (
+                    dest_path.exists()
+                    and dest_path.is_dir()
+                ):
+                    dest_path = (
+                        dest_path / src_path.name
+                    )
 
-        else:
-            rel = _TRASH_METADATA.get(resolved_src)
-            if rel is None:
-                rel = src_path.relative_to(
-                    self._boundary.trash_dir
-                )
+            else:
+                rel = _get_orig_rel_for_trash(self._target, resolved_src, rel_trash_in_trash)
+                dest_path = self._target / rel
 
-            dest_path = self._target / rel
+            # Explicitly validate computed restore destination.
+            dest_path = self._boundary.validate_restore_destination(
+                dest_path,
+                allow_new=True,
+            )
 
-        # Explicitly validate computed restore destination.
-        dest_path = self._boundary.validate_restore_destination(
-            dest_path,
-            allow_new=True,
-        )
+            # Check storage quota (restore from trash doesn't increase total usage)
+            self._check_quota_for_write(src_path, dest_path, "restore")
 
-        if dest_path.exists():
-            dest_path = self._resolve_collision(
+            self._boundary.validate_write(dest_path)
+
+            self._ensure_parent_dirs(
                 dest_path
             )
 
-        # Check storage quota (restore from trash doesn't increase total usage)
-        self._check_quota_for_write(src_path, dest_path, "restore")
+            dest_path = self._safe_move_file(
+                src_path,
+                dest_path,
+                resolve_collision=True,
+            )
 
-        self._boundary.validate_write(dest_path)
+            _remove_trash_entry(self._target, resolved_src, rel_trash_in_trash)
 
-        self._ensure_parent_dirs(
-            dest_path
-        )
-
-        shutil.move(
-            str(src_path),
-            str(dest_path),
-        )
-
-        orig_rel = _TRASH_METADATA.pop(resolved_src, None)
-        if orig_rel is not None:
-            bucket = _ORIGINAL_TO_TRASH.get((self._target, orig_rel))
-            if bucket and resolved_src in bucket:
-                bucket.remove(resolved_src)
-
-        return {
-            "action": "restore_file",
-            "trash_path": str(
-                self._get_relative(src_path)
-            ),
-            "restored_to": str(
-                self._get_relative(dest_path)
-            ),
-            "success": True,
-        }
+            return {
+                "action": "restore_file",
+                "trash_path": str(
+                    self._get_relative(src_path)
+                ),
+                "restored_to": str(
+                    self._get_relative(dest_path)
+                ),
+                "success": True,
+            }
 
     # ------------------------------------------------------------------
     # empty_trash
@@ -928,11 +1017,11 @@ class FileActionExecutor:
             if validated.is_file():
                 resolved_entry = validated.resolve()
                 validated.unlink()
-                orig_rel = _TRASH_METADATA.pop(resolved_entry, None)
-                if orig_rel is not None:
-                    bucket = _ORIGINAL_TO_TRASH.get((self._target, orig_rel))
-                    if bucket and resolved_entry in bucket:
-                        bucket.remove(resolved_entry)
+                try:
+                    rel_in_trash = validated.relative_to(self._boundary.trash_dir)
+                    _remove_trash_entry(self._target, resolved_entry, rel_in_trash)
+                except Exception:
+                    pass
                 deleted_count += 1
 
             elif validated.is_dir():
@@ -942,6 +1031,8 @@ class FileActionExecutor:
                 except OSError:
                     # Non-empty directories are left alone.
                     pass
+
+        _clear_all_trash_entries(self._target)
 
         return {
             "action": "empty_trash",

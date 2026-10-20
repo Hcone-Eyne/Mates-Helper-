@@ -1,6 +1,7 @@
 # this program acts like, Filesystem scanner and SQlite index sync
 
 # import the nessary modules
+import os
 from pathlib import Path
 from . import db
 from . organizer import CATEGORIES, VAULT_ROOT, _snippet
@@ -18,50 +19,49 @@ def scan(root: Path = VAULT_ROOT):
     seen_paths = set()
     indexed = 0
 
-    # iterating to whole db
-    for path in root.rglob("*"):
+    # iterating through vault, pruning trash directories
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".fox_trash")]
+        for filename in filenames:
+            path = Path(dirpath) / filename
 
-        # ignore directories
-        if not path.is_file():
-            continue
+            # ignore symbolic links for safety!
+            if path.is_symlink():
+                continue
 
-        # ignore symbolic links for safety!
-        if path.is_symlink():
-            continue
+            # getting the path
+            path = path.resolve()
 
-        # getting the path
-        path = path.resolve()
+            # make sure the resolved path is actually inside the vault
+            try:
+                rel = path.relative_to(root)
+            except ValueError:
+                continue
 
-        # make sure the resolved path (yes the above one) is actually inside the vault
-        try:
-            rel = path.relative_to(root)
-        except ValueError:
-            continue
+            if any(p.startswith(".fox_trash") for p in rel.parts):
+                continue
 
-        if ".fox_trash" in rel.parts:
-            continue
+            stat = path.stat()
 
-        stat = path.stat()
+            # category is normally the immediate parent folder.....
+            category = path.parent.name
 
-        # category is normally the immediate parent folder.....
-        category = path.parent.name
+            if category not in CATEGORIES:
+                category = "Other"
 
-        if category not in CATEGORIES:
-            category = "Other"
+            # saving the file details in the database
+            db.upsert_file(
+                path=path,
+                name=path.name,
+                ext=path.suffix.lower(),
+                category=category,
+                size=stat.st_size,
+                mtime=stat.st_mtime,
+                snippet=_snippet(path)
+            )
 
-        # saving the file details in the database
-        db.upsert_file(
-            path=path,
-            name=path.name,
-            ext=path.suffix.lower(),
-            category=category,
-            size=stat.st_size,
-            mtime=stat.st_mtime,
-            snippet=_snippet(path)
-        )
-
-        seen_paths.add(str(path))
-        indexed += 1
+            seen_paths.add(str(path))
+            indexed += 1
 
     removed = db.remove_file(root, seen_paths)
     return {

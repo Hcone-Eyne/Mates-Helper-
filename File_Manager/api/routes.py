@@ -1,6 +1,7 @@
 # this program is about exposing the file management features to Fox!
 
 # importing the nessary modules
+import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -92,7 +93,7 @@ def move_file(req: MoveRequest):
             "success": True,
             "path": str(result)
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as e:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError, sqlite3.Error) as e:
         raise HTTPException(
             status_code = 400,
             detail  = str(e)
@@ -110,7 +111,7 @@ def copy_files(req: CopyRequest):
             "success": True,
             "path": str(result)
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as e:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError, sqlite3.Error) as e:
         raise HTTPException(
             status_code=400,
             detail=str(e)
@@ -128,7 +129,7 @@ def rename_file(req: RenameRequest):
             "success":True,
             "path": str(result)
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as e:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError, sqlite3.Error) as e:
         raise HTTPException(
             status_code = 400,
             detail = str(e)
@@ -141,11 +142,11 @@ def delete_file(req: DeleteRequest):
         trash_path = modify_files.delete_file(req.path)
         return {
             "success": True,
-            "path": str(trash_path),
+            "path": req.path,
             "trash_path": str(trash_path),
             "trashed": True,
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as exc:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc)
@@ -161,7 +162,7 @@ def restore_file(req: RestoreRequest):
             "path": str(restored),
             "restored_to": str(restored),
         }
-    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError) as exc:
+    except (FileNotFoundError, ValueError, IsADirectoryError, PermissionError, OSError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc)
@@ -176,7 +177,7 @@ def create_folder(req: CreateFolderRequest):
             "success": True,
             "path": str(result)
         }
-    except (ValueError, IsADirectoryError, PermissionError, OSError) as exc:
+    except (ValueError, IsADirectoryError, PermissionError, OSError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc)

@@ -380,3 +380,69 @@ class TestFoxClubTrashCompatibility:
         with pytest.raises(FoxPolicyError):
             executor.execute("delete_file", {"path": "system/kernel.cfg"})
         assert sys_file.exists()
+
+
+class TestTrashDurabilityAndConcurrency:
+    def test_trash_metadata_persists_across_restart(
+        self, isolated_vault: Path
+    ) -> None:
+        from agent.fox.runtime import executor as ex
+
+        test_file = isolated_vault / "Documents" / "reboot_doc.txt"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text("survives restart", encoding="utf-8")
+        fm_scanner.scan_file(test_file)
+
+        trash_path = fm_mod.delete_file(test_file)
+        assert trash_path.exists()
+        assert not test_file.exists()
+
+        # Wipe in-memory caches to simulate server restart / worker recycle
+        ex._TRASH_METADATA.clear()
+        ex._ORIGINAL_TO_TRASH.clear()
+
+        # Restore using the trash path
+        restored = fm_mod.restore_file(trash_path)
+        assert restored == test_file
+        assert restored.exists()
+        assert restored.read_text(encoding="utf-8") == "survives restart"
+
+    def test_concurrent_restores_resolve_collisions_safely(
+        self, isolated_vault: Path
+    ) -> None:
+        import threading
+        from agent.fox.runtime import executor as ex
+
+        doc = isolated_vault / "Documents" / "parallel_doc.txt"
+        doc.parent.mkdir(parents=True, exist_ok=True)
+        doc.write_text("content_alpha", encoding="utf-8")
+        fm_scanner.scan_file(doc)
+        trash_a = fm_mod.delete_file(doc)
+
+        doc.write_text("content_beta", encoding="utf-8")
+        fm_scanner.scan_file(doc)
+        trash_b = fm_mod.delete_file(doc)
+
+        barrier = threading.Barrier(2)
+        errors: list[Exception] = []
+
+        def worker(trash_p: Path) -> None:
+            try:
+                barrier.wait(timeout=5)
+                fm_mod.restore_file(trash_p)
+            except Exception as exc:
+                errors.append(exc)
+
+        t1 = threading.Thread(target=worker, args=(trash_a,))
+        t2 = threading.Thread(target=worker, args=(trash_b,))
+        t1.start()
+        t2.start()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert not errors
+        restored_files = sorted(p for p in (isolated_vault / "Documents").iterdir() if p.is_file())
+        assert len(restored_files) == 2
+        contents = {p.read_text(encoding="utf-8") for p in restored_files}
+        assert contents == {"content_alpha", "content_beta"}
+

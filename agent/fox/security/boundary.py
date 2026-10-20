@@ -554,7 +554,12 @@ class FoxSecurityBoundary:
             resolved.relative_to(self._trash_dir_resolved)
             return True
         except ValueError:
-            return False
+            pass
+
+        if any(p.startswith(".fox_trash_meta") for p in resolved.parts):
+            return True
+
+        return False
 
     def validate_trash_path(
         self,
