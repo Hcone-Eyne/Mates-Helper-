@@ -22,6 +22,9 @@ File_Manager/file_index.db-*
 File_Manager/user_profs.json
 File_Manager/Vault/
 
+# Brain runtime data (docker volume ./data)
+data/
+
 # Test artifacts
 test_output/
 *.log
