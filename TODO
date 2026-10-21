@@ -14,17 +14,18 @@ covered by tests; the rest are real, still-open work.
       header); without it every protected endpoint fails closed with 401.
 - [ ] Cli still calls `os.system('clear')` before each menu redraw; if a
       terminal does not support it the menu reprints over itself.
-- [ ] `brain/Dockerfile` previously copied only app.py, orchestrator.py,
+- [ ] Phone: message listing is not implemented (kdeconnect-cli has no
+      option). D-Bus conversations plugin is the possible path.
+
+## Done
+
+- [DONE] `brain/Dockerfile` previously copied only app.py, orchestrator.py,
       tools.py and task_store.py, so the image could not import its own app.
       Fixed: root build context copies brain/, File_Manager/, agent/ plus the
       lazily imported Memory/, Finance_bot/, bot.py, Path_mapper.py; user data
       (Vault, file_index.db, user_profs.json) is excluded via .dockerignore.
       Still needs one live `docker compose up` run to verify (no Docker engine
       in this environment; covered by static layout-import tests meanwhile).
-- [ ] Phone: message listing is not implemented (kdeconnect-cli has no
-      option). D-Bus conversations plugin is the possible path.
-
-## Done
 
 - [DONE] `File_Manager/modify_files.py::delete_file` and `/files/delete` now
       move files into `.fox_trash` via the shared Fox `FileActionExecutor`
