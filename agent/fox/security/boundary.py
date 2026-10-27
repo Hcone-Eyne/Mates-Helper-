@@ -74,6 +74,7 @@ class FoxSecurityBoundary:
         "show": "list_directory",
         "display": "list_directory",
         "find": "search_files",
+        "find_files": "search_files",
         "search": "search_files",
         "locate": "search_files",
         "look": "search_files",

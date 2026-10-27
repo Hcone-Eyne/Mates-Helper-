@@ -352,7 +352,8 @@ def run_fox_agent():
 
     while True:
         try:
-            prompt = f"\n[You{'/' + conv_manager.active_member if getattr(conv_manager, 'active_member', None) else ''}]: "
+            active_member = getattr(conv_manager, "active_member", None) if in_conversation else None
+            prompt = f"\n[You{'/' + active_member if active_member else ''}]: "
             user_input = input(prompt).strip()
             if not user_input:
                 continue
@@ -360,6 +361,7 @@ def run_fox_agent():
                 if in_conversation:
                     console.print("[Fox]: Leaving conversation mode.")
                     in_conversation = False
+                    conv_manager.active_member = None
                     continue
                 break
 
@@ -411,15 +413,17 @@ def run_fox_agent():
                     console.print("[Fox]: Invalid choice.")
                 continue
 
-            if user_input.lower() in {"/talk", "talk"}:
-                # Handle /talk commands
+            first_word = user_input.split(maxsplit=1)[0].lower()
+            if first_word in {"/talk", "talk"}:
+                # Handle /talk commands ("/talk annie" - the member is the
+                # second word, so match on the first word, not the whole line)
                 parts = user_input.split(maxsplit=1)
                 if len(parts) < 2:
                     console.print("[Fox]: Usage: /talk <member>")
                     console.print("[Fox]: Available members: julie, annie, selina, gwen, fox")
                     continue
                 
-                member = parts[1].lower()
+                member = parts[1].strip().lower()
                 if member not in {"julie", "annie", "selina", "gwen", "fox"}:
                     console.print(f"[Fox]: Unknown member '{member}'. Available: julie, annie, selina, gwen, fox")
                     continue
@@ -434,6 +438,7 @@ def run_fox_agent():
                 if in_conversation:
                     console.print("[Fox]: Returning to task mode.")
                     in_conversation = False
+                    conv_manager.active_member = None
                 else:
                     console.print("[Fox]: Not in conversation mode.")
                 continue
@@ -442,6 +447,7 @@ def run_fox_agent():
                 if in_conversation:
                     console.print("[Fox]: Leaving conversation mode.")
                     in_conversation = False
+                    conv_manager.active_member = None
                     continue
                 break
 

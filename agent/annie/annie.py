@@ -6,7 +6,7 @@
 
 # importing the nessary modules
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 # external import
@@ -53,6 +53,10 @@ class AnnieResult:
     technical_handoff: str
     clarification_needed: list[str]
     raw_response: str
+    # optional: the Fox Space action Annie recommends to Selina (may be "")
+    action: str = ""
+    # optional: concrete arguments for that action (path, source, query...)
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 # main annie class
 class Annie:
@@ -105,6 +109,22 @@ IMPORTANT:
 - A future step in Julie's plan is not considered completed merely
   because it exists in the plan.
 
+Selina can only perform these Fox Space actions:
+- list_directory   (arguments: {"recursive": true/false})
+- search_files     (arguments: {"query": "text to look for"})
+- organise_folder  (arguments: {})
+- create_folder    (arguments: {"path": "folder/name"})
+- move_file        (arguments: {"source": "...", "destination": "..."})
+- copy_file        (arguments: {"source": "...", "destination": "..."})
+- rename_file      (arguments: {"path": "...", "new_name": "..."})
+- delete_file      (arguments: {"path": "..."})   # moves to trash
+- restore_file     (arguments: {"path": "..."})   # restores from trash
+
+Pick the ONE action that matches the user's intent and put it in "action".
+Only fill "arguments" with values the user actually gave you.
+If no action fits, set "action" to "" and explain why in
+"clarification_needed".
+
 Return ONLY valid JSON.
 
 Required format:
@@ -114,7 +134,9 @@ Required format:
   "requirements": ["..."],
   "constraints": ["..."],
   "technical_handoff": "...",
-  "clarification_needed": ["..."]
+  "clarification_needed": ["..."],
+  "action": "one of the actions above, or empty string",
+  "arguments": {}
 }
 """.strip()
 
@@ -171,6 +193,8 @@ Required format:
             technical_handoff=parsed["technical_handoff"],
             clarification_needed=parsed["clarification_needed"],
             raw_response=raw_response,
+            action=parsed["action"],
+            arguments=parsed["arguments"],
         )
 
     # this function refines Annie's handoff using Selina's technical feedback
@@ -207,6 +231,8 @@ Required format:
                 "constraints": previous_result.constraints,
                 "technical_handoff": previous_result.technical_handoff,
                 "clarification_needed": previous_result.clarification_needed,
+                "action": previous_result.action,
+                "arguments": previous_result.arguments,
             },
             indent=2,
         )}
@@ -246,6 +272,8 @@ Required format:
             technical_handoff=parsed["technical_handoff"],
             clarification_needed=parsed["clarification_needed"],
             raw_response=raw_response,
+            action=parsed["action"],
+            arguments=parsed["arguments"],
         )
 
     @staticmethod
@@ -273,6 +301,8 @@ Required format:
             raise TypeError("[Annie]: Backend response must be a string..... ")
 
         text = raw_response.strip()
+        if "</think>" in text:
+            text = text.rsplit("</think>", 1)[-1].strip()
 
         # this removes optional markdown fences around JSON responses
         if text.startswith("```"):
@@ -354,5 +384,13 @@ Required format:
                 raise TypeError(
                     f"[Annie]: {field} must contain only strings."
                 )
+
+        # optional fields: a bad value is dropped instead of failing the
+        # whole handoff - Selina still has the keyword fallback
+        action = data.get("action", "")
+        data["action"] = action.strip() if isinstance(action, str) else ""
+
+        arguments = data.get("arguments", {})
+        data["arguments"] = arguments if isinstance(arguments, dict) else {}
 
         return data

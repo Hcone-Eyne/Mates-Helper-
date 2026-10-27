@@ -93,12 +93,26 @@ class OllamaClient:
         
     # this function handles the chat
     def chat(self, messages, stream = False, think = None):
+        effective_think = self.think if think is None else think
+        outbound_messages = messages
+        if (
+            not effective_think
+            and isinstance(self.model, str)
+            and "qwen3" in self.model.lower()
+            and isinstance(messages, list)
+            and messages
+        ):
+            outbound_messages = [dict(m) if isinstance(m, dict) else m for m in messages]
+            last = outbound_messages[-1]
+            if isinstance(last, dict) and isinstance(last.get("content"), str):
+                if "/no_think" not in last["content"] and "/think" not in last["content"]:
+                    last["content"] = f"{last['content']}\n/no_think"
 
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": outbound_messages,
             "stream": stream,
-            "think": self.think if think is None else think
+            "think": effective_think
         }
 
         data = json.dumps(payload).encode("utf-8")
@@ -116,6 +130,16 @@ class OllamaClient:
             with urllib.request.urlopen(request, timeout=120) as response:
                 result = json.loads(
                     response.read().decode("utf-8")
+                )
+
+            if (
+                isinstance(result, dict)
+                and isinstance(result.get("message"), dict)
+                and isinstance(result["message"].get("content"), str)
+                and "</think>" in result["message"]["content"]
+            ):
+                result["message"]["content"] = (
+                    result["message"]["content"].rsplit("</think>", 1)[-1].lstrip()
                 )
 
             return result

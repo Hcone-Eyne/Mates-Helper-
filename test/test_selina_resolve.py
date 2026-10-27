@@ -72,7 +72,11 @@ class TestResolveAction:
         assert "organise_folder" in SUPPORTED_ACTIONS
         assert "list_directory" in SUPPORTED_ACTIONS
         assert "find_files" in SUPPORTED_ACTIONS
-        assert len(SUPPORTED_ACTIONS) == 3
+        # every executor action except the privileged empty_trash
+        for action in ("delete_file", "restore_file", "move_file",
+                       "copy_file", "rename_file", "create_folder"):
+            assert action in SUPPORTED_ACTIONS
+        assert "empty_trash" not in SUPPORTED_ACTIONS
 
     def test_action_keywords_not_empty(self):
         for action, keywords in SUPPORTED_ACTIONS.items():

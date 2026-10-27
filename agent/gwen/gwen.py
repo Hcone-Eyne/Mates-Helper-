@@ -331,6 +331,8 @@ class Gwen:
     def _parse_structured_response(raw: str) -> dict:
         """Parse Gwen's JSON response, handling markdown fences and fallbacks."""
         content = raw.strip()
+        if "</think>" in content:
+            content = content.rsplit("</think>", 1)[-1].strip()
 
         # Strip markdown code fences if present.
         if content.startswith("```") and content.endswith("```"):

@@ -13,13 +13,60 @@ from agent.annie.annie import AnnieResult
 # Explicit mapping of supported actions to their trigger keywords.
 # Each keyword is matched as a whole word inside a normalized requirement.
 # To add a new action, add an entry here AND implement it in the executor.
+#
+# Order matters: specific / destructive verbs are checked before generic
+# words like "list" or "directory", so "delete the file in that directory"
+# resolves to delete_file, not list_directory.
+# empty_trash is deliberately NOT here - it is privileged and can never be
+# requested by an LLM.
 SUPPORTED_ACTIONS = {
+    "restore_file": [
+        "restore",
+        "recover",
+        "undelete",
+        "untrash",
+    ],
+    "delete_file": [
+        "delete",
+        "remove",
+        "trash",
+        "erase",
+        "discard",
+    ],
+    "move_file": [
+        "move",
+        "relocate",
+        "transfer",
+    ],
+    "copy_file": [
+        "copy",
+        "duplicate",
+    ],
+    "rename_file": [
+        "rename",
+    ],
+    "create_folder": [
+        "mkdir",
+        "create folder",
+        "create a folder",
+        "create directory",
+        "create a directory",
+        "make folder",
+        "make a folder",
+        "new folder",
+    ],
     "organise_folder": [
         "organise",
         "organize",
         "sort",
         "categorize",
         "category",
+    ],
+    "find_files": [
+        "search",
+        "find",
+        "locate",
+        "look",
     ],
     "list_directory": [
         "list",
@@ -28,13 +75,32 @@ SUPPORTED_ACTIONS = {
         "contents",
         "directory",
     ],
-    "find_files": [
-        "search",
-        "find",
-        "locate",
-        "look",
-    ],
 }
+
+# Action names Annie may hand over directly (the executor's canonical names).
+# find_files is Selina's historical name for search_files.
+_DIRECT_ACTIONS = frozenset(SUPPORTED_ACTIONS) | {"search_files"}
+
+# Destructive actions are never resolved from bulk wording by keyword
+# matching - they need one concrete target.
+_DESTRUCTIVE_ACTIONS = frozenset({"delete_file", "move_file"})
+_BULK_RE = re.compile(r"\b(everything|all|every|entire|whole)\b")
+
+
+def _match_text(text: str) -> str:
+    normalized = text.strip().lower()
+    if not normalized:
+        return ""
+    bulk = _BULK_RE.search(normalized) is not None
+    for action_name, keywords in SUPPORTED_ACTIONS.items():
+        # Never turn "delete everything" / "remove all" into an action.
+        if bulk and action_name in _DESTRUCTIVE_ACTIONS:
+            continue
+        for kw in keywords:
+            if re.search(rf"\b{re.escape(kw)}\b", normalized):
+                return action_name
+    return ""
+
 
 def _resolve_action(requirements: list[str]) -> str:
     """Scan all requirements and return the first matching supported action.
@@ -43,11 +109,9 @@ def _resolve_action(requirements: list[str]) -> str:
     first matched action name, or "" if no action could be resolved.
     """
     for req in requirements:
-        normalized = req.strip().lower()
-        for action_name, keywords in SUPPORTED_ACTIONS.items():
-            for kw in keywords:
-                if re.search(rf"\b{re.escape(kw)}\b", normalized):
-                    return action_name
+        action = _match_text(req)
+        if action:
+            return action
     return ""
 
 # this class is used to perform the task selina needs
@@ -176,7 +240,13 @@ class Selina():
                 expanded_task=expanded_task,
                 interpretation=interpretation,
                 action="",
-                error="Could not determine an action from Annie's requirements."
+                error=(
+                    "Could not determine an action from Annie's requirements. "
+                    "Fox Club can: list, search, organise, create folder, "
+                    "move, copy, rename, delete (to trash) and restore files "
+                    "in Fox Space. Try e.g. 'list my files' or "
+                    "'delete notes.txt'."
+                )
             )
 
         # Build arguments from Annie's structured fields.
@@ -247,17 +317,27 @@ class Selina():
 
     @staticmethod
     def _action_from_requirements(annie_result: AnnieResult) -> str:
-        """Resolve an action name from Annie's requirements.
+        """Resolve an action name from Annie's handoff.
 
-        Scans all requirements against the explicit SUPPORTED_ACTIONS
-        mapping using whole-word regex matching.
+        Priority:
+        1. the explicit action Annie picked (if it is one Selina knows),
+        2. keyword match over Annie's requirements.
+
+        Selina deliberately does not guess from free text: if Annie gave
+        neither, the task fails loudly instead of running something random.
         """
+        explicit = (getattr(annie_result, "action", "") or "").strip().lower()
+        if explicit in _DIRECT_ACTIONS:
+            return explicit
+
         return _resolve_action(annie_result.requirements)
 
     @staticmethod
     def _build_arguments_from_annie(annie_result: AnnieResult) -> dict[str, Any]:
         """Build executor arguments from Annie's result."""
-        return {
+        arguments: dict[str, Any] = dict(getattr(annie_result, "arguments", {}) or {})
+        # Annie's structured context never overwrites concrete arguments.
+        context = {
             "user_request": annie_result.user_request,
             "interpretation": annie_result.interpretation,
             "requirements": annie_result.requirements,
@@ -265,3 +345,6 @@ class Selina():
             "technical_handoff": annie_result.technical_handoff,
             "clarification_needed": annie_result.clarification_needed,
         }
+        for key, value in context.items():
+            arguments.setdefault(key, value)
+        return arguments

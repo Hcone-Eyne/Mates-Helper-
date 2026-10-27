@@ -1,7 +1,7 @@
-**Mates-Helper**
+## **Mates-Helper**
 I made this software to help me/ other to manage things like school/ college schedule, Finance management, Phone Integration in "CLI" userfriendly way..
 
-**Features:**
+## **Features:**
 I have implemented some main features to this program..
     1.Schedule
     2.Files
@@ -35,7 +35,7 @@ I have implemented some main features to this program..
 
 ![Main Menu](docs/assets/cli_main_menu.png)
 
-**Fox Club:**
+## **Fox Club:**
 The name itself states its a club, and in this club there are 4 major roles,
     1.Annie
     2.Julie
@@ -46,12 +46,14 @@ Those AI have their specific roles so we can prevent most of the errors.
 
 The goal is to give the user the best response without "AI Hallucination Answer" or "Inaccurate Answer".
 
-**Club Member Roles:**
-We have 4 special AI,
-    1.Annie
-    2.Julie
-    3.Selina
-    4.Gwen
+## **Club Member Roles:**
+We have 4 special AI Characters,
+
+1.Annie
+2.Julie
+3.Selina
+4.Gwen
+
 **Julie:** Julie handles user prompt, converts user prompt to breakable task which is later sent to rest of the AI to accomplish the task
 
 **Annie:** Annie is like manager, She assigns the task to Selina and Gwem in their preffered format.

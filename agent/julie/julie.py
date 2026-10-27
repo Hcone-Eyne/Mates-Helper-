@@ -138,6 +138,8 @@ class Julie:
     def _parse_result(raw_result: str) -> dict[str, Any]:
         """Parse and validate Julie's structured response."""
         content = raw_result.strip()
+        if "</think>" in content:
+            content = content.rsplit("</think>", 1)[-1].strip()
         # Handle both markdown-fenced and raw JSON responses
         if content.startswith("```") and content.endswith("```"):
             lines = content.splitlines()
