@@ -49,7 +49,7 @@ Thursday,24MA306 DM,2.20,3.05,
 Thursday,None 24MA306 DM,3.05,3.50,
 Friday,24HSS03 LS None,8.30 9.20,,
 Friday,24HSS03 LS,9.20,10.10,
-Friday,Corrupted,10.20,11.10,
+Friday,[A,10.20,11.10,
 Friday,FDS,"4
 12.00
 FDS",,

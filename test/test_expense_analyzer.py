@@ -88,6 +88,26 @@ class TestLegitimateCsv:
         assert len(df) == 2
 
 
+    def test_bank_statement_with_metadata_headers_and_debit_credit_columns(self, root):
+        bank_csv = (
+            "Account Holder Name :  B ENOCH,Account Holder Address :  Sample Address,,,\n"
+            "Account Number : 123456789,,,,\n"
+            "Txn Date,Particulars,Chq/Ref No,Withdrawal,Deposit,Balance\n"
+            "01/02/2025,Grocery Store,REF123,150.00,,4850.00\n"
+            "05/02/2025,Salary Credit,REF456,,2500.00,7350.00\n"
+        )
+        statement = root / "bank_statement.csv"
+        statement.write_text(bank_csv)
+
+        df = ea.load_statement(str(statement))
+
+        assert len(df) == 2
+        assert df.iloc[0]["description"] == "Grocery Store"
+        assert df.iloc[0]["amount"] == pytest.approx(-150.00)
+        assert df.iloc[1]["description"] == "Salary Credit"
+        assert df.iloc[1]["amount"] == pytest.approx(2500.00)
+
+
 class TestLegitimatePdf:
     def test_valid_pdf_inside_approved_root(self, root):
         statement = root / "statement.pdf"

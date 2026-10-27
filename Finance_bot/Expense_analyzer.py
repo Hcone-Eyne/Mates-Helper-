@@ -59,7 +59,11 @@ def _resolve_inside_statements(path):
         raise ValueError("[Fox]: Approved Finance directory is unavailable.")
 
     try:
-        resolved = Path(path).expanduser().resolve()
+        raw_path = Path(path).expanduser()
+        if not raw_path.is_absolute():
+            resolved = (resolved_root / raw_path).resolve()
+        else:
+            resolved = raw_path.resolve()
     except OSError as exc:
         raise ValueError("[Fox]: Could not resolve the statement path.") from exc
 
@@ -91,7 +95,34 @@ def load_statement(path: str) -> pd.DataFrame:
 
 # this function loads and normalizes transaction data from a CSV file
 def _load_csv(path: Path):
-    raw = pd.read_csv(path)
+    import csv
+
+    # Indian bank statements (SBI, HDFC, ICICI, etc.) usually include account holder
+    # info and address headers for the first few rows before the actual transaction table.
+    # Detect the actual table header row dynamically:
+    header_idx = None
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            for i in range(30):
+                line = f.readline()
+                if not line:
+                    break
+                row = [c.strip().lower() for c in next(csv.reader([line]))]
+                has_date = any("date" in c for c in row)
+                has_desc = any(
+                    any(k in c for k in ["narration", "particular", "description", "remark", "details"])
+                    for c in row
+                )
+                if has_date and has_desc:
+                    header_idx = i
+                    break
+    except Exception:
+        header_idx = None
+
+    if header_idx is not None and header_idx > 0:
+        raw = pd.read_csv(path, skiprows=header_idx)
+    else:
+        raw = pd.read_csv(path)
 
     cols = {c.lower(): c for c in raw.columns}
 
@@ -99,27 +130,44 @@ def _load_csv(path: Path):
     def find(*candidates):
         for cand in candidates:
             for lower, original in cols.items():
-                if cand in  lower:
+                if cand in lower:
                     return original
         return None
 
-    # creatung variable to fetch details from CSV
-    date_col = find("date") # this fetch date
-    desc_col = find("narration", "decription", "particukars", "remark") # this fetch description
-    amt_col = find("amount") # this fetch amount....
+    # creating variable to fetch details from CSV
+    date_col = find("date", "txn date", "value date")
+    desc_col = find("narration", "description", "particular", "remark", "details", "transaction details")
+    amt_col = find("amount", "txn amount", "net amount")
 
-    if not all([date_col, desc_col, amt_col]):
+    # Indian bank statements split transactions into Debit/Withdrawal and Credit/Deposit
+    withdrawal_col = find("withdrawal", "debit", "dr")
+    deposit_col = find("deposit", "credit", "cr")
+
+    # If separate debit and credit columns exist, use them over balance/generic amount
+    if withdrawal_col or deposit_col:
+        w = pd.to_numeric(raw[withdrawal_col].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0) if withdrawal_col else 0
+        d = pd.to_numeric(raw[deposit_col].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0) if deposit_col else 0
+        amounts = d - w
+    elif amt_col:
+        amounts = pd.to_numeric(raw[amt_col].astype(str).str.replace(",", "").str.strip(), errors="coerce")
+    else:
         raise ValueError(
             f"[Fox]: Couldn't find date/description/amount columns in {list(raw.columns)}. "
             "Rename them or extend the `find()` candidates."
         )
 
+    if not date_col or not desc_col:
+        raise ValueError(
+            f"[Fox]: Couldn't find date/description columns in {list(raw.columns)}. "
+            "Rename them or extend the `find()` candidates."
+        )
+
     df = pd.DataFrame({
-        "date": pd.to_datetime(raw[date_col], errors = "coerce", dayfirst = True),
-        "description" : raw[desc_col].astype(str),
-        "amount": pd.to_numeric(raw[amt_col], errors="coerce")
+        "date": pd.to_datetime(raw[date_col], errors="coerce", dayfirst=True),
+        "description": raw[desc_col].astype(str),
+        "amount": amounts
     })
-    return df.dropna(subset = ["date", "amount"])
+    return df.dropna(subset=["date", "amount"])
 
 # this function extracts and normalizes transaction data from a PDF file
 def _load_pdf(path: Path):
