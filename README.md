@@ -54,13 +54,23 @@ We have 4 special AI Characters,
 3.Selina
 4.Gwen
 
-**Julie:** Julie handles user prompt, converts user prompt to breakable task which is later sent to rest of the AI to accomplish the task
+![Fox Club Member Menu](docs/assets/fox_club_talk_menu.png)
 
-**Annie:** Annie is like manager, She assigns the task to Selina and Gwem in their preffered format.
+**Julie:** Julie handles user prompt, Converts user prompt to breakable easier task which is later send to rest of the AI to finish their task
 
-**Selina:** Selina is like the action player, She does the work which is assigned by Annie and gives it to security check (Which is Gwen)
+![Julie](docs/assets/fox_club_julie.png)
 
-**Gwen:** Gwen is Reviewer, Based on Annie assigned task, She performs the check of Selina work, If anything is wrong, Gwen reports to Brain/Orchestrator (Which is Python program i have made.) for further action
+**Annie:** Annie is like a manager, She assigns the task to Selina and Gwem in their preffered format.....
+
+![Annie](docs/assets/fox_club_annie.png)
+
+**Selina:** Selina is like the Action player, She does the work which is assigned by Annie and gives it to Security/Review check (Which is Gwen)
+
+![Selina](docs/assets/fox_club_selina.png)
+
+**Gwen:** Gwen is Reviewer, Based on Annie assigned task, She performs the check in Selina work, If anything is wrong, Gwen reports to Brain/Orchestrator (Which is Python program i have made) for further action..
+
+![Gwen](docs/assets/fox_club_gwen.png)
 
 ---
 
