@@ -3,11 +3,12 @@ I made this software to help me/ other to manage things like school/ college sch
 
 ## **Features:**
 I have implemented some main features to this program..
-    1.Schedule
-    2.Files
-    3.Phone
-    4.Finance
-    5.Fox Agent.
+
+- 1.Schedule
+- 2.Files
+- 3.Phone
+- 4.Finance
+- 5.Fox Agent.
 
 **Schedule:** This feature can help with your schedule turning "Image" -> "CSV" which can be used by Fox Agent Club members to help user regarding their schedult
 
@@ -37,10 +38,11 @@ I have implemented some main features to this program..
 
 ## **Fox Club:**
 The name itself states its a club, and in this club there are 4 major roles,
-    1.Annie
-    2.Julie
-    3.Selina
-    4.Gwen
+
+- 1.Annie
+- 2.Julie
+- 3.Selina
+- 4.Gwen
 
 Those AI have their specific roles so we can prevent most of the errors. 
 
@@ -49,11 +51,12 @@ The goal is to give the user the best response without "AI Hallucination Answer"
 ## **Club Member Roles:**
 We have 4 special AI Characters,
 
-1.Annie
-2.Julie
-3.Selina
-4.Gwen
-
+- 1.Annie
+- 2.Julie
+- 3.Selina
+- 4.Gwen
+  
+**Preview of CLI**
 ![Fox Club Member Menu](docs/assets/fox_club_talk_menu.png)
 
 **Julie:** Julie handles user prompt, Converts user prompt to breakable easier task which is later send to rest of the AI to finish their task
