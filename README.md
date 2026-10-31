@@ -6,7 +6,9 @@ This is a quick video walkthrough showing Mates-Helper in action (Schedule, Fina
 
 <video src="docs/assets/Mates-Helper-Video!.mp4" controls="controls" width="100%"></video>
 
-> 🎬 **Demo Video File:** [docs/assets/Mates-Helper-Video!.mp4](docs/assets/Mates-Helper-Video!.mp4)
+> 🎬 **Demo Video File:**[docs/assets/Mates-Helper-Video!.mp4](docs/assets/Mates-Helper-Video!.mp4)
+
+https://github.com/user-attachments/assets/14750ba5-5d76-48a7-a873-628690310765
 
 **Couldn't demonstrate most of the phone function as this will leak sensitive data like, phone's fingerprint etc..**
 
