@@ -1,4 +1,4 @@
-"""Focused tests for Ollama exact-model selection (P1-9).
+"""Focused tests for Ollama exact-model selection.
 
 A configured-but-missing model must never be silently swapped: non-strict
 mode warns on stderr naming both models, strict mode (argument or

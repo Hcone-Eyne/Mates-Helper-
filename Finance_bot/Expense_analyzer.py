@@ -14,7 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional visualization depende
 from rich.console import Console
 from rich.panel import Panel
 
-from File_Manager.organizer import VAULT_ROOT
+from File_Manager.organizer import VAULT_ROOT, ensure_vault
 
 # setting up the console
 console = Console()
@@ -51,6 +51,9 @@ def _resolve_inside_statements(path):
     comparison), so `..` traversal and symlink escapes are rejected.
     Fails closed when the approved root itself is missing or invalid.
     """
+    if Path(STATEMENT_ROOT) == Path(VAULT_ROOT):
+        ensure_vault()
+
     try:
         resolved_root = Path(STATEMENT_ROOT).expanduser().resolve()
     except OSError as exc:
@@ -266,6 +269,13 @@ def print_summary(summary: dict):
 def plot_category_bar(summary: dict):
     if plt2 is None:
         raise RuntimeError("plotext is required for chart rendering.")
+    import shutil
+    plt2.clf()
+    term_w, term_h = shutil.get_terminal_size((100, 24))
+    # Keep width ~85% of terminal so the right border never wraps into black stripes
+    width = max(60, int(term_w * 0.85))
+    height = max(12, min(18, int(term_h * 0.6)))
+    plt2.plotsize(width, height)
     by_category = summary["by_category"]
     plt2.bar(by_category.index.tolist(), by_category.values.tolist())
     plt2.title(f"Spend by Category — {summary['month']}")
@@ -280,7 +290,11 @@ def run_expense_analyzer():
     try:
         df = load_statement(path)
     except Exception as e:
-        console.print(f"[Fox]: {e}")
+        msg = str(e)
+        if msg.startswith("[Fox]: "):
+            console.print(msg)
+        else:
+            console.print(f"[Fox]: {msg}")
         return
 
     summary = build_summary(df)

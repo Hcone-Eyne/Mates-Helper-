@@ -1,4 +1,4 @@
-"""Regression tests for Vault recoverable deletion and restoration (Task 1).
+"""Regression tests for Vault recoverable deletion and restoration.
 
 Covers:
 - Vault delete moves files into recoverable `.fox_trash` via shared Fox executor

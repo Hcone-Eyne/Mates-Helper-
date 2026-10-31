@@ -1,6 +1,6 @@
-"""Focused SQLite concurrency tests for brain/task_store.py (P1-7).
+"""Focused SQLite concurrency tests for brain/task_store.py.
 
-Proves the store stays correct when the threaded P1-6 workers hammer it:
+Proves the store stays correct when the threaded workers hammer it:
 single-winner claim/cancel races, contention without database-locked
 failures, WAL reads-during-writes, old-DB migration, and honest surfacing
 of genuinely unrecoverable errors. Temporary databases only; threads are

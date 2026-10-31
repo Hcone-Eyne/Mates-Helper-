@@ -17,6 +17,7 @@ COUNTED_DIRS = frozenset({
     "storage",
     "apps",
     "trash",
+    ".fox_trash",
 })
 
 # Directories that should NOT count toward storage (read-only or system-managed)

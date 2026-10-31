@@ -792,7 +792,7 @@ def main():
     print("FOX CLUB STRESS TEST")
     print("="*60)
     print(f"Test directory: {TEST_DIR}")
-    print(f"Project root: /Users/enoch/Desktop/Connectivity_A")
+    print(f"Project root: {Path(__file__).parent.resolve()}")
     
     # Verify Ollama is running
     client = OllamaClient()

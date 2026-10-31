@@ -11,9 +11,16 @@ import re
 
 # this function is going to handle all arithmetic operations and extraction
 def operation_finder(num):
+    if not isinstance(num, str):
+        raise TypeError("Expression must be a string.")
+
+    # Remove commas used in formatting (e.g. 1,000)
+    cleaned = num.replace(",", "")
 
     # tokenizing the input string to extract numbers and operators
-    tokens = re.findall(r'\d+\.?\d*|[+\-*/]', num)
+    # Matches numbers with optional leading dot (.5 or 0.5) or standard floats/ints
+    tokens = re.findall(r'\d*\.?\d+|[+\-*/]', cleaned)
+    tokens = [t for t in tokens if t != "."]
 
     # checking if user entered valid expression
     if not tokens:
@@ -40,7 +47,6 @@ def operation_finder(num):
 
     # merged tokens is used also used by postfix function below
     tokens = merged
-
 
     # this function is going to convert tokens into int / float
     def to_num(tokens):

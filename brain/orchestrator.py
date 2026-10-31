@@ -160,10 +160,11 @@ def is_conversational_message(message: str) -> bool:
         "good afternoon",
         "good evening",
     }
-    if normalized in greetings:
+    clean = " ".join(re.findall(r"[a-z0-9]+", normalized))
+    if normalized in greetings or clean in greetings:
         return True
 
-    if normalized.startswith(("hi ", "hello ", "hey ")) and not normalized.endswith("?"):
+    if (normalized.startswith(("hi ", "hello ", "hey ")) or clean.startswith(("hi ", "hello ", "hey "))) and not normalized.endswith("?"):
         return True
 
     conversational_starts = (

@@ -26,7 +26,7 @@ def _register(name, description, params, fn, permission=None):
     *description* – one-line explanation shown to the model
     *params*      – list of {"name": ..., "type": ..., "desc": ...} dicts
     *fn*          – callable(**kwargs) -> str
-    *permission*  – optional permission label for P2-3 centralized control.
+    *permission*  – optional permission label for centralized control.
                     METADATA ONLY: nothing enforces it yet, so recording one
                     must never claim a gate that does not exist today.
     """
@@ -74,7 +74,7 @@ def tool_prompt_block():
 
 
 # ---------------------------------------------------------------------------
-# Capability registry view (P2-2)
+# Capability registry view
 # ---------------------------------------------------------------------------
 # TOOLS above is the single authoritative registry and dispatch() is the
 # single execution funnel. The helpers below only *describe* entries in a
@@ -84,8 +84,8 @@ def tool_prompt_block():
 #   - a capability's "entry" is a dotted path that must resolve to the exact
 #     callable already stored in TOOLS - execution stays in dispatch()
 #   - the "permission" field is descriptive metadata; centralized permission
-#     enforcement is P2-3 work, so no gate is wired to it here.
-# Note for P2-3/P2-4: importing this module pulls in pandas, so callers that
+#     enforcement is future work, so no gate is wired to it here.
+# Note: importing this module pulls in pandas, so callers that
 # must stay lightweight (like brain.tools) import it lazily.
 
 def _capability(name, info):

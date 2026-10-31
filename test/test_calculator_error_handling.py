@@ -1,4 +1,4 @@
-"""Focused tests for calculator error-handling consistency (P2-4).
+"""Focused tests for calculator error-handling consistency.
 
 operation_finder never raises for token-less input ("abc", "", whitespace) -
 it returns None - but it DOES raise for malformed expressions:

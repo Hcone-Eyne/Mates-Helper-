@@ -1,4 +1,4 @@
-"""Focused tests for finance memory/state handling (P2-3).
+"""Focused tests for finance memory/state handling.
 
 Memory/memory_storer.memory_log is a process-global list shared by the CLI
 finance menu, agent tools, MCP tools, and concurrent Brain worker threads.

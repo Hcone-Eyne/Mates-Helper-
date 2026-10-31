@@ -1,4 +1,4 @@
-"""Focused tests for Agent_plugins/providers/ (P1-4).
+"""Focused tests for Agent_plugins/providers/.
 
 The openai/openrouter/nvidia modules used to import a nonexistent
 `openai_compatible` module. OpenRouter and NVIDIA speak the OpenAI

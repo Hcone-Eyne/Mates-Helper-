@@ -109,13 +109,15 @@ def run_scheduler():
             # missing schedule CSV (choice 1/3) must not raise NameError here.
             where = image_path or SCHEDULE_CSV
             console.print(f"[Fox]: Couldn't find a file at '{where}' - Check the path and try again....")
-            input("\nPress Enter to continue...")
+            _phone_pause()
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
-            input("\nPress Enter to continue...")
+            _phone_pause()
+        except (EOFError, KeyboardInterrupt):
+            break
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
-            input("\nPress Enter to continue...")
+            _phone_pause()
 
 def run_finance_bot():
     # this loops the finance bot until user wants to exit
@@ -172,17 +174,15 @@ def run_finance_bot():
         # way round, `except Exception` swallowed it and the branch never ran
         except ValueError:
             console.print("[Fox]: Invalid Input, Try again.....")
-            input("\nPress Enter to continue...")
+            _phone_pause()
+        except (EOFError, KeyboardInterrupt):
+            console.print("[Fox]: Exiting Finance Bot.....")
+            memory_lister()
+            break
         # this catch any other error
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
-            input("\nPress Enter to continue...")
-        # this catches the keyboard interrupt error to exit the finance bot.....
-        # (without `break` the loop simply redrew the menu and kept going)
-        except KeyboardInterrupt:
-            console.print("[Fox]: Exiting Finance Bot.....")
-            memory_lister()  # calls the memory_lister to display previous operations
-            break
+            _phone_pause()
 
 def run_file_manager():
     from File_Manager import organizer, db
@@ -229,7 +229,7 @@ def run_file_manager():
                     console.print(f"[Fox]: [{r['category']}] {r['name']}")
                 input("\nPress Enter to continue...")
             elif cmd.startswith("move "):
-                parts = cmd[len("move "):].split()
+                parts = shlex.split(cmd[len("move "):])
                 if len(parts) != 2:
                     console.print("[Fox]: Usage: move <filename> <category>")
                 else:
@@ -244,12 +244,12 @@ def run_file_manager():
             else:
                 console.print("[Fox]: Didn't catch that — try scan, find, ls, or move.")
                 input("\nPress Enter to continue...")
-        except KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             console.print("[Fox]: Exiting File Manager.....")
             break
         except Exception as e:
             console.print(f"[Fox]: Error Occured: {e}")
-            input("\nPress Enter to continue...")
+            _phone_pause()
 
 # Phone Hub - routes commands through the phone CLI (phone.phone_cli.phone_cli)
 # so the phone module stays isolated behind its own command parser
@@ -265,6 +265,9 @@ def _phone_pause():
 def run_phone_hub():
     # lazy import: phone module is only loaded when the user opens the hub
     from phone.phone_cli import phone_cli
+    from phone.security.permission import DEFAULT_PERMISSIONS, PhonePermision
+
+    user_permissions = dict(DEFAULT_PERMISSIONS)
 
     while True:
         try:
@@ -279,6 +282,7 @@ def run_phone_hub():
                 "[bold blue]notifications --device <id>[/bold blue] - read phone notifications\n"
                 "[bold blue]messages|list-sms[/bold blue]         - message listing (not supported by kdeconnect-cli)\n"
                 "[bold blue]sms <number> <message>[/bold blue]       - send an SMS\n"
+                "[bold blue]grant <notification|sms>[/bold blue]    - enable phone permissions\n"
                 "[bold blue]permissions[/bold blue]                  - show the local permission policy\n"
                 "[bold blue]0[/bold blue] - back to main menu",
                 title="[Fox]: Phone Hub"
@@ -291,8 +295,25 @@ def run_phone_hub():
                 console.print("[Fox]: Exiting Phone Hub.....")
                 break
 
+            if cmd.lower().startswith("grant "):
+                arg = cmd[len("grant "):].strip().lower()
+                if arg in {"notifications", "notification"}:
+                    user_permissions[PhonePermision.NOTIFICATIONS] = True
+                    console.print("[Fox]: Granted 'Notifications' permission.")
+                elif arg in {"sms", "send_message", "message"}:
+                    user_permissions[PhonePermision.SEND_MESSAGE] = True
+                    user_permissions[PhonePermision.MESSAGES] = True
+                    console.print("[Fox]: Granted 'Send Message' and 'Messages' permission.")
+                else:
+                    console.print("[Fox]: Unknown permission. Use: grant notification or grant sms")
+                _phone_pause()
+                continue
+
             try:
-                phone_cli.main(shlex.split(cmd))
+                if user_permissions == DEFAULT_PERMISSIONS:
+                    phone_cli.main(shlex.split(cmd))
+                else:
+                    phone_cli.main(shlex.split(cmd), permissions=user_permissions)
             except SystemExit as exc:
                 # argparse / phone CLI exit codes must not kill the main CLI
                 if exc.code not in (0, None):
@@ -328,7 +349,7 @@ def run_fox_agent():
         console.print(f"[red][Fox]: Agent unavailable: {e}[/red]")
         console.print("[Fox]: Start the Ollama server (or pull a model), then choose Fox Agent again.")
         console.print("[Fox]: Returning to the main menu.")
-        input("\nPress Enter to continue...")
+        _phone_pause()
         return
 
     console.print(
@@ -389,6 +410,10 @@ def run_fox_agent():
 
             if user_input.lower() in {"/model", "model"}:
                 select_ollama_model()
+                try:
+                    conv_manager.set_model(get_model())
+                except Exception:
+                    pass
                 continue
             
             if user_input.lower() in {"/think", "think"}:
@@ -405,8 +430,16 @@ def run_fox_agent():
                 choice = input("\n[Fox]: Choose: ").strip()
                 if choice == "1":
                     console.print(set_think(True))
+                    try:
+                        conv_manager.set_think(True)
+                    except Exception:
+                        pass
                 elif choice == "2":
                     console.print(set_think(False))
+                    try:
+                        conv_manager.set_think(False)
+                    except Exception:
+                        pass
                 elif choice == "0":
                     console.print("[Fox]: Unchanged")
                 else:
@@ -414,16 +447,23 @@ def run_fox_agent():
                 continue
 
             first_word = user_input.split(maxsplit=1)[0].lower()
-            if first_word in {"/talk", "talk"}:
-                # Handle /talk commands ("/talk annie" - the member is the
-                # second word, so match on the first word, not the whole line)
+            if first_word in {"/talk", "talk"} or (
+                len(user_input.split()) == 1
+                and first_word.lstrip("/") in {"julie", "annie", "selina", "gwen", "fox"}
+            ):
+                # Handle /talk commands ("/talk annie" or shortcut "/julie" / "julie")
                 parts = user_input.split(maxsplit=1)
-                if len(parts) < 2:
-                    console.print("[Fox]: Usage: /talk <member>")
-                    console.print("[Fox]: Available members: julie, annie, selina, gwen, fox")
-                    continue
-                
-                member = parts[1].strip().lower()
+                if first_word in {"/talk", "talk"}:
+                    if len(parts) < 2:
+                        console.print("[Fox]: Usage: /talk <member>")
+                        console.print("[Fox]: Available members: julie, annie, selina, gwen, fox")
+                        continue
+                    member = parts[1].strip().lower()
+                    if member.startswith("to "):
+                        member = member[3:].strip()
+                    member = member.lstrip("/")
+                else:
+                    member = first_word.lstrip("/")
                 if member not in {"julie", "annie", "selina", "gwen", "fox"}:
                     console.print(f"[Fox]: Unknown member '{member}'. Available: julie, annie, selina, gwen, fox")
                     continue
@@ -453,15 +493,17 @@ def run_fox_agent():
 
             if in_conversation:
                 # Send message to active member
-                response = conv_manager.send_message(user_input)
                 active = conv_manager.active_member or "fox"
+                with console.status(f"[cyan]{active.capitalize()} is thinking...[/cyan]"):
+                    response = conv_manager.send_message(user_input)
                 console.print(f"\n[{active.capitalize()}]: {response}")
             else:
                 # Normal task mode
-                response = run_task(user_input)
+                with console.status("[cyan]Fox Club is working...[/cyan]"):
+                    response = run_task(user_input)
                 console.print(f"\n[Fox]: {response}")
 
-        except KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             break
         except Exception as e:
             console.print(f"[red][Fox]: Agent error: {e}[/red]")

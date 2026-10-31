@@ -2,9 +2,10 @@
 # only incoming not outgoing networks
 
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from playwright.sync_api import sync_playwright
+from agent.ollama.tools import _validate_url_for_fetch
 
 # initialising the app with variable!
 app = FastAPI()
@@ -21,6 +22,9 @@ class BrowserRequest(BaseModel):
 @app.post("/browse")
 # this function is used to monitor the browser request at sametime gives the agent result
 def browse(req:BrowserRequest):
+    err = _validate_url_for_fetch(req.url)
+    if err:
+        raise HTTPException(status_code=400, detail=f"Blocked URL: {err}")
     with sync_playwright() as p:
         browser = p.chromium.launch(proxy = {"server": PROXY_SERVER})
         page = browser.new_page()

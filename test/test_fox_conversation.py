@@ -1,4 +1,4 @@
-"""Focused tests for FoxConversationManager history bounds (P2-2).
+"""Focused tests for FoxConversationManager history bounds.
 
 MemberSession history used to grow for the life of the manager while every
 turn re-sent the whole session to the model (request/token/latency/cost

@@ -38,7 +38,7 @@ def default_db_path() -> str:
 
 DB_PATH = default_db_path()
 
-# Connection hardening for the threaded worker architecture (P1-7).
+# Connection hardening for the threaded worker architecture.
 #
 # - CONNECT_TIMEOUT_SECONDS bounds how long sqlite3.connect waits on a
 #   locked database before raising OperationalError.
@@ -72,24 +72,12 @@ def _conn():
     conn = sqlite3.connect(DB_PATH, timeout=CONNECT_TIMEOUT_SECONDS)
     try:
         conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
-        _configure_journal_mode(conn)
+        conn.execute("PRAGMA synchronous=NORMAL")
         _ensure_schema(conn)
     except BaseException:
         conn.close()
         raise
     return conn
-
-
-def _configure_journal_mode(conn) -> None:
-    # WAL is a file-database feature; :memory: databases keep their default.
-    # journal_mode persists in the file, synchronous does not, so the latter
-    # is set on every connection while the former is attempted each time too
-    # (a no-op when already WAL) to cover files created elsewhere.
-    if DB_PATH == ":memory:":
-        return
-    row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
-    if row is not None and str(row[0]).lower() == "wal":
-        conn.execute("PRAGMA synchronous=NORMAL")
 
 
 def _ensure_schema(conn) -> None:
@@ -100,6 +88,10 @@ def _ensure_schema(conn) -> None:
     with _schema_lock:
         if key in _schema_ready:
             return
+        if DB_PATH != ":memory:":
+            row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+            if row is not None and str(row[0]).lower() == "wal":
+                conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute(
             """CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

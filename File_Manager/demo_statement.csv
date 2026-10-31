@@ -1,0 +1,17 @@
+Account Holder Name :  ALEX FOX,Account Holder Address :  42 MG ROAD ANNA NAGAR CHENNAI 600040,,,,
+CustomerId : 102938475,IFSC :  BKID0008001,,,,
+Account Number : 802710110099999,Branch Name :  ANNA NAGAR,,,,
+Transaction Date ,From : 25-09-2026 ,To : 25-10-2026,,,
+Amount ,From :  ,To : ,,,
+Cheque No. ,Begin Cheque :  ,End Cheque :  ,,,
+Transaction Type : All,,,,,
+,,,,,
+Sr No,Date,Remarks,Debit,Credit,Balance Amount
+1,26-09-2026,UPI/626808323497/DR/Swiggy/BKID/swiggyupi/UPI,420,,12580.00
+2,28-09-2026,UPI/627002381670/DR/Uber/YESB/uberindia/UPI,230,,12350.00
+3,30-09-2026,UPI/663726709649/DR/Amazon/ICIC/amazonpay/UPI,890,,11460.00
+4,03-10-2026,UPI/627429444094/DR/Zomato/YESB/zomatoord/UPI,350,,11110.00
+5,08-10-2026,UPI/627565624972/DR/Uber/UTIB/uberrides/UPI,180,,10930.00
+6,14-10-2026,UPI/627529421336/DR/Amazon/ICIC/amazonin/UPI,850,,10080.00
+7,19-10-2026,UPI/627881920112/DR/Jio/YESB/jiorecharge/UPI,299,,9781.00
+8,22-10-2026,UPI/627993817263/CR/Stipend/SBIN/meritgrant/UPI,,1500,11281.00

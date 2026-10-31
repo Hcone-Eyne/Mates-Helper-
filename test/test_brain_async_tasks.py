@@ -1,4 +1,4 @@
-"""Focused tests for Brain background task execution (P1-6).
+"""Focused tests for Brain background task execution.
 
 The worker is exercised directly with controlled TaskWorker instances
 (deterministic timeouts/worker counts) plus real persisted state - no

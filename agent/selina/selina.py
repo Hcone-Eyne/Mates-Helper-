@@ -326,6 +326,12 @@ class Selina():
         Selina deliberately does not guess from free text: if Annie gave
         neither, the task fails loudly instead of running something random.
         """
+        req_text = " ".join(annie_result.requirements + [annie_result.user_request]).lower()
+        if _BULK_RE.search(req_text):
+            explicit = (getattr(annie_result, "action", "") or "").strip().lower()
+            if explicit in _DESTRUCTIVE_ACTIONS:
+                return ""
+
         explicit = (getattr(annie_result, "action", "") or "").strip().lower()
         if explicit in _DIRECT_ACTIONS:
             return explicit
@@ -335,7 +341,20 @@ class Selina():
     @staticmethod
     def _build_arguments_from_annie(annie_result: AnnieResult) -> dict[str, Any]:
         """Build executor arguments from Annie's result."""
-        arguments: dict[str, Any] = dict(getattr(annie_result, "arguments", {}) or {})
+        raw_args: dict[str, Any] = dict(getattr(annie_result, "arguments", {}) or {})
+
+        # Security allowlist: only permit safe, benign executor parameters from LLM payloads
+        # Explicitly blocks privilege escalation (e.g. overwrite=True, show_trash, include_trash)
+        SAFE_KEYS = {"path", "source", "destination", "new_name", "query", "recursive", "limit"}
+        filtered_args = {}
+        for k, v in raw_args.items():
+            if k in SAFE_KEYS:
+                # Do not permit targeting protected metadata files like .fox_trash_meta.sqlite
+                if isinstance(v, str) and (".fox_trash" in v.lower() or "trash_meta" in v.lower()):
+                    continue
+                filtered_args[k] = v
+
+        arguments = filtered_args
         # Annie's structured context never overwrites concrete arguments.
         context = {
             "user_request": annie_result.user_request,

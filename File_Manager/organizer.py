@@ -26,6 +26,15 @@ def ensure_vault():
     INBOX.mkdir(parents=True, exist_ok=True)
     for cat in CATEGORIES:
         (VAULT_ROOT / cat).mkdir(parents=True, exist_ok=True)
+    
+    # Auto-seed demo statement into Vault for fresh-clone reviewers
+    sample = Path(__file__).resolve().parent / "demo_statement.csv"
+    vault_demo = VAULT_ROOT / "demo_statement.csv"
+    if sample.exists() and not vault_demo.exists():
+        try:
+            shutil.copy2(sample, vault_demo)
+        except OSError:
+            pass
 
 # this function reads a file and returns the first 500 characters of its text. If it can't read the file, it returns an empty string.
 def _snippet(path, max_chars=500):

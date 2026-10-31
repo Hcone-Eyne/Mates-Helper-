@@ -18,7 +18,7 @@ AGENT_PORT = os.environ.get("AGENT_PORT", "9000")
 # dispatch funnel; browse is Brain-only and posts to the sandboxed browser
 # endpoint. Generating this list from the capability registry would change
 # model-visible schemas (different param shapes, tools the agent registry does
-# not hold), so consolidation is deferred to P2-3 and must not silently alter
+# not hold), so consolidation is deferred and must not silently alter
 # what the Anthropic model sees. Do not import agent.ollama.tools at module
 # level here: it pulls in pandas and this module is loaded by the browse-only
 # path.

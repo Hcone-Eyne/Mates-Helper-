@@ -112,7 +112,11 @@ class OllamaClient:
             "model": self.model,
             "messages": outbound_messages,
             "stream": stream,
-            "think": effective_think
+            "think": effective_think,
+            "options": {
+                "num_predict": 512 if effective_think else 384,
+                "repeat_penalty": 1.15,
+            },
         }
 
         data = json.dumps(payload).encode("utf-8")

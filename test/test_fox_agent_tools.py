@@ -223,7 +223,7 @@ class TestToolRegistry:
 
 
 class TestCapabilityRegistry:
-    """P2-2: thin capability view over the single TOOLS registry.
+    """Thin capability view over the single TOOLS registry.
 
     The view must describe entries only - execution always stays in the
     existing dispatch() funnel, and the permission field is metadata that
@@ -306,7 +306,7 @@ class TestCapabilityRegistry:
     def test_permission_absent_by_default(self):
         from agent.ollama.tools import get_capability
 
-        # No gate is wired yet (P2-3), so current capabilities record none.
+        # No gate is wired yet, so current capabilities record none.
         assert get_capability("schedule_view")["permission"] is None
         assert get_capability("web_browse")["permission"] is None
 
@@ -315,7 +315,7 @@ class TestCapabilityRegistry:
 
         t._register(
             name="test_permission_tool",
-            description="temporary P2-2 test capability",
+            description="temporary test capability",
             params=[{"name": "x", "type": "str", "desc": "demo"}],
             fn=lambda x="": f"ran:{x}",
             permission="phone.send_message",

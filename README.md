@@ -1,6 +1,15 @@
 ## **Mates-Helper**
 I made this software to help me/ other to manage things like school/ college schedule, Finance management, Phone Integration in "CLI" userfriendly way..
 
+## **Demo Video:**
+This is a quick video walkthrough showing Mates-Helper in action (Schedule, Finance Graphs, File Vault, Phone Hub, and Fox Club Multi-Agent):
+
+<video src="docs/assets/Mates-Helper-Video!.mp4" controls="controls" width="100%"></video>
+
+> 🎬 **Demo Video File:** [docs/assets/Mates-Helper-Video!.mp4](docs/assets/Mates-Helper-Video!.mp4)
+
+**Couldn't demonstrate most of the phone function as this will leak sensitive data like, phone's fingerprint etc..**
+
 ## **Features:**
 I have implemented some main features to this program..
 
@@ -125,3 +134,21 @@ Run the offline automated test suite:
 ```bash
 pytest -q test/
 ```
+
+---
+### NOTE!
+
+## Development Journal
+**Note:** This journal is made by Me + AI (i assist it) so reviewer knows how i used ai, This journal will give all the detailed explanation! (I used ai to created this, because i don't want to miss tiny details of AI usage disclosure.. )
+
+Detailed session logs, hours verification (73h 10m tracked across 41 coding days / 105 commits (including this)), bug, and AI usage disclosures can be found in [JOURNAL.md](JOURNAL.md).
+
+## AI Disclosure (Hack Club Pixl Compliance)
+- **AI - Assistance:** Google Antigravity Desktop (Gemini 3.8), Opencode and Claude were used like assistants for testing the code + generation + security check and debugging. Development heartbeats are logged as `category: "ai coding"` in Hackatime..
+
+- **Human - Authored Core:** Timetable OCR pipeline, CLI interface, KDE Connect phone integration, banking statement parser, and file vault architecture were designed and guided by me across 41 coding sessions tho..
+
+- **In - App Local Agent:** The Fox Club multi-agent system runned 100% locally via Ollama (`qwen3`), guaranteeing that no personal data leaves your machine!
+
+---
+**Thanks For Reviewing My Project!**

@@ -1,4 +1,4 @@
-"""Adversarial tests for File Manager FTS5 search input (P1-5).
+"""Adversarial tests for File Manager FTS5 search input.
 
 Raw user input used to flow straight into the FTS5 MATCH expression, so
 quotes, parentheses, operators, and column filters caused SQLite syntax

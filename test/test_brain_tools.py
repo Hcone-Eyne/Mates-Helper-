@@ -136,7 +136,7 @@ class TestDispatcher:
 
 
 class TestBrainCapabilityRelationship:
-    """P2-2: brain/tools.py stays the Anthropic model-facing schema, but the
+    """brain/tools.py stays the Anthropic model-facing schema, but the
     tools it delegates must be discoverable in the agent-side capability
     registry (the plugin source of truth)."""
 

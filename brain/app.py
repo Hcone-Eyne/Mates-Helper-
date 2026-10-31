@@ -1,6 +1,29 @@
 # this program is going to be like messaging app for the agents!
 
 # importing the nessary modules
+import os
+from pathlib import Path
+
+# Load environment variables from .env if present
+def _load_env_file():
+    env_file = Path(__file__).resolve().parent.parent / ".env"
+    if env_file.is_file():
+        try:
+            with open(env_file, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip("'\"")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+        except Exception:
+            pass
+
+_load_env_file()
+
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field # this module is used for data validation

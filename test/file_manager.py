@@ -79,7 +79,7 @@ def setup():
     test_file = INBOX / "fm_test.txt"
     test_file.write_text(
         "File Manager test file.\n"
-        "This file exists only for testing Jarvis File Manager.\n"
+        "This file exists only for testing File Manager.\n"
     )
 
     return test_file
